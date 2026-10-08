@@ -1,7 +1,7 @@
 """
 Entre Linhas — Desktop + QR code para o tirador
-- Dispositivo principal: grade + controle de rodadas
-- Celular do tirador: mostra coord + Acertou/Errou
+- Dispositivo principal: grade + controle de rodadas + timer
+- Celular do tirador: coordenada secreta + Acertou/Errou + iniciar cronômetro
 - Comunicação via Firebase Realtime Database
 """
 
@@ -36,7 +36,6 @@ st.set_page_config(
 # SECRETS — leitura tolerante a erros
 # =====================================================
 def _get_secret(key, default=""):
-    """Lê um secret com tolerância a erros (caso não exista secrets.toml)."""
     try:
         return st.secrets[key]
     except (KeyError, FileNotFoundError):
@@ -172,7 +171,7 @@ def gerar_qr_code(url):
 
 
 # =====================================================
-# TIMER
+# TIMER VISUAL (componente JS)
 # =====================================================
 def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
     if tempo_total <= 0:
@@ -447,6 +446,56 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
+    # ---- Cronômetro (só aparece se o timer estiver ativo) ----
+    timer_ativo = dados.get("timer_ativo", False)
+    timer_iniciado_em = dados.get("timer_iniciado_em")
+    tempo_total_seg = dados.get("tempo_total", 0)
+
+    if timer_ativo and tempo_total_seg > 0:
+        if not timer_iniciado_em:
+            st.markdown("---")
+            st.caption("⏱️ Inicie o cronômetro quando seu time começar a pensar.")
+            if st.button("▶️ Iniciar cronômetro", type="primary", use_container_width=True):
+                fb_patch(sala_id, {"timer_iniciado_em": _agora_ms()})
+                st.rerun()
+        else:
+            decorrido_ms = _agora_ms() - timer_iniciado_em
+            restante_seg = max(0, int(tempo_total_seg - decorrido_ms / 1000))
+            mm = restante_seg // 60
+            ss = restante_seg % 60
+
+            if restante_seg == 0:
+                cor, icone, texto_estado = "#dc2626", "⏰", "Tempo esgotado"
+            elif restante_seg <= tempo_total_seg * 0.2:
+                cor, icone, texto_estado = "#dc2626", "🔴", "Correndo"
+            elif restante_seg <= tempo_total_seg * 0.5:
+                cor, icone, texto_estado = "#eab308", "🟡", "Correndo"
+            else:
+                cor, icone, texto_estado = "#22c55e", "🟢", "Correndo"
+
+            st.markdown(
+                f"""
+                <div style="padding:14px 18px; background:{cor}15;
+                            border:2px solid {cor}; border-radius:10px;
+                            text-align:center; font-family:system-ui;
+                            margin:14px 0;">
+                    <div style="font-size:12px;color:#64748b;
+                                text-transform:uppercase;letter-spacing:1px;">
+                        {icone} Cronômetro {texto_estado}
+                    </div>
+                    <div style="font-size:42px;font-weight:bold;color:{cor};
+                                font-variant-numeric:tabular-nums;line-height:1;
+                                margin-top:6px;">
+                        {mm:02d}:{ss:02d}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            st.caption("🔄 Atualizando a cada 1.5s...")
+
+    # ---- Botões Acertou / Errou ----
+    st.markdown("---")
     col_ok, col_err = st.columns(2)
 
     with col_ok:
@@ -474,6 +523,8 @@ defaults = {
     "sala_id": None,
     "timer_ativo": False, "timer_minutos": 2, "timer_segundos": 0,
     "timer_mudo": False, "turno_iniciado_em": _agora_ms(), "turno_contador": 0,
+    "timer_rodando": False,
+    "tempo_pausado_segundos": None,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -531,17 +582,14 @@ with st.sidebar:
         with c2:
             st.session_state.timer_segundos = st.number_input(
                 "Segundos", 0, 59, st.session_state.timer_segundos, 5)
-        cm, cr = st.columns(2)
+        cm, _ = st.columns(2)
         with cm:
             icone = "🔇 Som off" if st.session_state.timer_mudo else "🔊 Som on"
             if st.button(icone, use_container_width=True):
                 st.session_state.timer_mudo = not st.session_state.timer_mudo
                 st.rerun()
-        with cr:
-            if st.button("🔄 Resetar", use_container_width=True):
-                st.session_state.turno_iniciado_em = _agora_ms()
-                st.session_state.turno_contador += 1
-                st.rerun()
+
+        st.caption("▶️ Inicie pelo **celular do tirador** ou pelos botões abaixo.")
 
     st.divider()
     st.subheader("📚 Biblioteca")
@@ -593,6 +641,15 @@ if sortear_btn:
         st.session_state.sala_id = sala_id
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
+        st.session_state.timer_rodando = False
+        st.session_state.tempo_pausado_segundos = None
+
+        tempo_total_seg = 0
+        if st.session_state.timer_ativo:
+            tempo_total_seg = (
+                st.session_state.timer_minutos * 60
+                + st.session_state.timer_segundos
+            )
 
         fb_put(sala_id, {
             "coord": None,
@@ -601,6 +658,9 @@ if sortear_btn:
             "time_atual": 1,
             "nome_turno": st.session_state.nome_time_1,
             "criada_em": _agora_ms(),
+            "timer_ativo": st.session_state.timer_ativo and tempo_total_seg > 0,
+            "tempo_total": tempo_total_seg,
+            "timer_iniciado_em": None,
         })
 
         st.success(f"✅ Grade **{tamanho}×{tamanho}** pronta! Sala **{sala_id}**.")
@@ -627,12 +687,21 @@ cor_turno = "#1e3c78" if time_atual == 1 else "#dc2626"
 
 
 # =====================================================
-# POLLING: verifica se o celular respondeu
+# POLLING: verifica decisões do celular e sincroniza timer
 # =====================================================
 if sala_id and fase == "decidindo":
     st_autorefresh(interval=1500, key="desktop_poll")
     dados_fb = fb_get(sala_id)
     evento = dados_fb.get("evento")
+    timer_fb = dados_fb.get("timer_iniciado_em")
+
+    # Sincroniza: se o celular iniciou o timer e o desktop ainda não está rodando
+    if timer_fb and not st.session_state.timer_rodando and st.session_state.timer_ativo:
+        st.session_state.turno_iniciado_em = timer_fb
+        st.session_state.tempo_pausado_segundos = None
+        st.session_state.timer_rodando = True
+        st.session_state.turno_contador += 1
+        st.rerun()
 
     if evento == "acertou":
         estados[carta_atual] = time_atual
@@ -644,7 +713,13 @@ if sala_id and fase == "decidindo":
         st.session_state.fase = "aguardando"
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
-        fb_patch(sala_id, {"evento": None, "coord": None, "estado": "aguardando"})
+        st.session_state.timer_rodando = False
+        st.session_state.tempo_pausado_segundos = None
+        fb_patch(sala_id, {
+            "evento": None, "coord": None,
+            "estado": "aguardando",
+            "timer_iniciado_em": None,
+        })
         st.rerun()
 
     elif evento == "errou":
@@ -657,7 +732,13 @@ if sala_id and fase == "decidindo":
         st.session_state.fase = "aguardando"
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
-        fb_patch(sala_id, {"evento": None, "coord": None, "estado": "aguardando"})
+        st.session_state.timer_rodando = False
+        st.session_state.tempo_pausado_segundos = None
+        fb_patch(sala_id, {
+            "evento": None, "coord": None,
+            "estado": "aguardando",
+            "timer_iniciado_em": None,
+        })
         st.rerun()
 
 
@@ -678,7 +759,7 @@ if sala_id:
                 "**Como usar:**\n"
                 "1. O tirador da rodada escaneia o QR code com o celular.\n"
                 "2. A tela do celular mostrará **apenas a coordenada** e os botões "
-                "**✅ Acertou** / **❌ Errou**.\n"
+                "**▶️ Iniciar cronômetro**, **✅ Acertou** e **❌ Errou**.\n"
                 "3. Quando o time responder, o tirador clica no botão correspondente.\n"
                 "4. O jogo atualiza automaticamente aqui."
             )
@@ -697,17 +778,117 @@ if total_cartas > 0:
 
 
 # =====================================================
-# TIMER
+# TIMER COM CONTROLE MANUAL
 # =====================================================
 if st.session_state.timer_ativo:
     tempo_total = st.session_state.timer_minutos * 60 + st.session_state.timer_segundos
+
     if tempo_total > 0:
-        render_timer(
-            tempo_total=tempo_total,
-            iniciado_em_ms=st.session_state.turno_iniciado_em,
-            mudo=st.session_state.timer_mudo,
-            key=f"turno_{st.session_state.turno_contador}",
-        )
+        rodando = st.session_state.timer_rodando
+        pausado_seg = st.session_state.tempo_pausado_segundos
+
+        if pausado_seg is None:
+            restante_exibir = tempo_total
+        else:
+            restante_exibir = pausado_seg
+
+        col_play, col_pause, col_reset, col_status = st.columns([1, 1, 1, 2])
+
+        with col_play:
+            if not rodando:
+                label = "▶️ Iniciar" if pausado_seg is None else "▶️ Retomar"
+                if st.button(label, type="primary", use_container_width=True):
+                    if pausado_seg is None:
+                        st.session_state.turno_iniciado_em = _agora_ms()
+                    else:
+                        segundos_decorridos = tempo_total - pausado_seg
+                        st.session_state.turno_iniciado_em = (
+                            _agora_ms() - (segundos_decorridos * 1000)
+                        )
+                    st.session_state.tempo_pausado_segundos = None
+                    st.session_state.timer_rodando = True
+                    st.session_state.turno_contador += 1
+                    if sala_id:
+                        fb_patch(sala_id, {"timer_iniciado_em": st.session_state.turno_iniciado_em})
+                    st.rerun()
+
+        with col_pause:
+            if rodando:
+                if st.button("⏸️ Pausar", use_container_width=True):
+                    decorrido_ms = _agora_ms() - st.session_state.turno_iniciado_em
+                    restante = max(0, int(tempo_total - decorrido_ms / 1000))
+                    st.session_state.tempo_pausado_segundos = restante
+                    st.session_state.timer_rodando = False
+                    st.rerun()
+
+        with col_reset:
+            if st.button("🔄 Reiniciar", use_container_width=True):
+                st.session_state.turno_iniciado_em = _agora_ms()
+                st.session_state.tempo_pausado_segundos = None
+                st.session_state.timer_rodando = False
+                st.session_state.turno_contador += 1
+                if sala_id:
+                    fb_patch(sala_id, {"timer_iniciado_em": None})
+                st.rerun()
+
+        with col_status:
+            if rodando:
+                st.markdown(
+                    "<div style='padding-top:6px;color:#22c55e;font-weight:bold;'>"
+                    "🟢 Cronômetro rodando</div>",
+                    unsafe_allow_html=True,
+                )
+            elif pausado_seg is not None:
+                st.markdown(
+                    f"<div style='padding-top:6px;color:#eab308;font-weight:bold;'>"
+                    f"⏸️ Pausado em {restante_exibir // 60:02d}:{restante_exibir % 60:02d}</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<div style='padding-top:6px;color:#64748b;font-weight:bold;'>"
+                    f"⚪ Aguardando início ({tempo_total // 60:02d}:{tempo_total % 60:02d})</div>",
+                    unsafe_allow_html=True,
+                )
+
+        if rodando:
+            render_timer(
+                tempo_total=tempo_total,
+                iniciado_em_ms=st.session_state.turno_iniciado_em,
+                mudo=st.session_state.timer_mudo,
+                key=f"turno_{st.session_state.turno_contador}",
+            )
+        else:
+            pct = (restante_exibir / tempo_total) * 100 if tempo_total > 0 else 0
+            if pct > 50:
+                cor = "#22c55e"
+            elif pct > 20:
+                cor = "#eab308"
+            else:
+                cor = "#dc2626"
+
+            st.markdown(
+                f"""
+                <div style="padding:16px 20px; border-radius:12px;
+                            background:{cor}15; border:2px solid {cor};
+                            text-align:center; font-family:system-ui;">
+                    <div style="font-size:56px; font-weight:bold; color:{cor};
+                                font-variant-numeric: tabular-nums; line-height:1;
+                                margin-bottom:6px;">
+                        {restante_exibir // 60:02d}:{restante_exibir % 60:02d}
+                    </div>
+                    <div style="font-size:12px; color:#64748b;
+                                text-transform:uppercase; letter-spacing:1.5px;">
+                        {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}
+                    </div>
+                    <div style="width:100%; height:10px; background:#e2e8f0;
+                                border-radius:5px; overflow:hidden; margin-top:14px;">
+                        <div style="width:{pct}%; height:100%; background:{cor};"></div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
 
 # =====================================================
@@ -746,12 +927,15 @@ else:
                 nova = deck[0]
                 st.session_state.carta_atual = nova
                 st.session_state.fase = "decidindo"
+                st.session_state.timer_rodando = False
+                st.session_state.tempo_pausado_segundos = None
                 fb_patch(sala_id, {
                     "coord": nova,
                     "estado": "sorteada",
                     "evento": None,
                     "time_atual": time_atual,
                     "nome_turno": nome_turno,
+                    "timer_iniciado_em": None,
                 })
                 st.rerun()
 
