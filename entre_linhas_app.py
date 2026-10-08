@@ -9,7 +9,6 @@ import io
 import time
 import random
 import string
-import hashlib
 from datetime import datetime
 
 import requests
@@ -32,8 +31,22 @@ st.set_page_config(
     layout="wide",
 )
 
-FIREBASE_URL = st.secrets.get("FIREBASE_URL", "")
-APP_URL = st.secrets.get("APP_URL", "http://localhost:8501")
+
+# =====================================================
+# SECRETS — leitura tolerante a erros
+# =====================================================
+def _get_secret(key, default=""):
+    """Lê um secret com tolerância a erros (caso não exista secrets.toml)."""
+    try:
+        return st.secrets[key]
+    except (KeyError, FileNotFoundError):
+        return default
+    except Exception:
+        return default
+
+
+FIREBASE_URL = _get_secret("FIREBASE_URL", "")
+APP_URL = _get_secret("APP_URL", "http://localhost:8501")
 
 
 # =====================================================
@@ -342,7 +355,6 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
 # INTERFACE MOBILE (celular do tirador)
 # =====================================================
 def render_mobile(sala_id):
-    """Interface simplificada que o celular do tirador vê."""
     st.markdown("""
     <style>
         #MainMenu, header, footer { visibility: hidden; }
@@ -351,10 +363,9 @@ def render_mobile(sala_id):
     """, unsafe_allow_html=True)
 
     if not FIREBASE_URL:
-        st.error("⚠️ Firebase não configurado. Configure o FIREBASE_URL em Secrets.")
+        st.error("⚠️ Firebase não configurado. Peça ao operador do jogo para configurar o FIREBASE_URL.")
         return
 
-    # Polling via autorefresh
     st_autorefresh(interval=1500, key="mobile_poll")
 
     dados = fb_get(sala_id)
@@ -370,7 +381,6 @@ def render_mobile(sala_id):
     nome_turno = dados.get("nome_turno", "Time")
     cor_turno = "#1e3c78" if dados.get("time_atual", 1) == 1 else "#dc2626"
 
-    # Cabeçalho
     st.markdown(
         f"""
         <div style="padding:10px 16px; background:{cor_turno}15;
@@ -388,24 +398,19 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
-    # Estado: aguardando o desktop sortear
     if not coord or estado == "aguardando":
         st.info("⏳ Aguardando o dispositivo principal sortear uma carta...")
         st.caption("Não feche esta página.")
         return
 
-    # Estado: carta sorteada, aguardando decisão
     if evento:
-        # Já foi decidido — aguardando próxima
         st.success("✅ Decisão registrada!")
         st.markdown(
             f"""
             <div style="text-align:center; padding:40px 20px;
                         background:#f1f5f9; border-radius:12px;
                         font-family:system-ui;">
-                <div style="font-size:14px;color:#64748b;">
-                    Você marcou
-                </div>
+                <div style="font-size:14px;color:#64748b;">Você marcou</div>
                 <div style="font-size:32px;font-weight:bold;
                             color:{'#22c55e' if evento == 'acertou' else '#dc2626'};
                             margin-top:12px;">
@@ -420,7 +425,6 @@ def render_mobile(sala_id):
         )
         return
 
-    # Estado normal: mostra coord e botões
     st.markdown(
         f"""
         <div style="text-align:center; padding:30px 20px;
@@ -567,13 +571,16 @@ if sortear_btn:
     if len(palavras_usuario) < tamanho * 2:
         st.error(f"❌ Você tem apenas **{len(palavras_usuario)} palavras**.")
     elif not FIREBASE_URL:
-        st.error("⚠️ Configure o **FIREBASE_URL** em Secrets antes de iniciar.")
+        st.error(
+            "⚠️ Configure o **FIREBASE_URL** em Secrets antes de iniciar.\n\n"
+            "**Localmente:** crie `.streamlit/secrets.toml`\n\n"
+            "**Streamlit Cloud:** Settings → Secrets"
+        )
     else:
         linhas, colunas = sortear(palavras_usuario, tamanho)
         sala_id = gerar_sala_id()
         coords = gerar_coordenadas(tamanho)
 
-        # Reset local
         st.session_state.linhas = linhas
         st.session_state.colunas = colunas
         st.session_state.tamanho_atual = tamanho
@@ -587,7 +594,6 @@ if sortear_btn:
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
 
-        # Estado inicial no Firebase
         fb_put(sala_id, {
             "coord": None,
             "estado": "aguardando",
@@ -767,7 +773,6 @@ else:
             unsafe_allow_html=True,
         )
 
-        # Botão de fallback (se o celular der problema)
         with st.expander("🆘 Emergência: usar botões do desktop"):
             col_a, col_b = st.columns(2)
             with col_a:
