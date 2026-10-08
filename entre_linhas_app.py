@@ -1,6 +1,7 @@
 """
-Entre Linhas — Desktop + QR code para o tirador
-Layout em duas colunas com auto-scale, cartas faltantes e mensagem persistida.
+Entre Linhas — Desktop + QR único para o tirador
+Painel esquerdo: grade protagonista com auto-scale
+Painel direito: Time (A) + Cronômetro (B) + Cartas Faltantes (C) + Ação (D)
 """
 
 import io
@@ -458,118 +459,60 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     html = f"""
 <!DOCTYPE html><html><head><style>
     html, body {{ margin: 0; padding: 0; font-family: system-ui, sans-serif; }}
-
-    .placar {{
-        display: flex; gap: 24px; align-items: center;
+    .placar {{ display: flex; gap: 24px; align-items: center;
         padding: 12px 16px; background: #f8fafc;
         border: 2px solid #cbd5e1; border-radius: 10px;
-        margin-bottom: 14px; font-size: 16px;
-        font-weight: 600; flex-wrap: wrap;
-    }}
+        margin-bottom: 14px; font-size: 16px; font-weight: 600;
+        flex-wrap: wrap; }}
     .placar-time {{ display: flex; align-items: center; gap: 8px; }}
-    .placar-dot {{
-        width: 22px; height: 22px; border-radius: 4px;
-        border: 2px solid #4a5568; flex-shrink: 0;
-    }}
+    .placar-dot {{ width: 22px; height: 22px; border-radius: 4px;
+        border: 2px solid #4a5568; flex-shrink: 0; }}
     .dot-b {{ background: #1e3c78; }}
     .dot-r {{ background: #dc2626; }}
     .dot-x {{ background: #94a3b8; }}
-    .placar-nome {{
-        font-size: 15px; max-width: 180px;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }}
-    .placar-num {{
-        font-size: 26px; min-width: 34px;
-        text-align: center; font-weight: bold;
-    }}
+    .placar-nome {{ font-size: 15px; max-width: 180px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+    .placar-num {{ font-size: 26px; min-width: 34px;
+        text-align: center; font-weight: bold; }}
     .placar-num.blue {{ color: #1e3c78; }}
     .placar-num.red {{ color: #dc2626; }}
     .placar-num.grey {{ color: #64748b; }}
-
-    .grid-wrap {{
-        width: 100%;
-        overflow: visible;
-        position: relative;
-    }}
-    .grid-el {{
-        display: grid;
-        grid-template-columns:
-            {coord_w}px
-            {cell}px
-            repeat({tam}, {cell}px);
-        gap: 6px;
-        width: fit-content;
+    .grid-wrap {{ width: 100%; overflow: visible; position: relative; }}
+    .grid-el {{ display: grid;
+        grid-template-columns: {coord_w}px {cell}px repeat({tam}, {cell}px);
+        gap: 6px; width: fit-content;
         transform-origin: top left;
-        transition: transform 0.15s ease-out;
-    }}
-    .cel {{
-        border: 3px solid #4a5568;
-        padding: 10px 6px;
-        text-align: center;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: {min_h}px;
-        font-size: {f_word}px;
-        border-radius: 6px;
-        user-select: none;
-        overflow: hidden;
-        word-break: break-word;
-        line-height: 1.15;
-    }}
-    .cel-coord {{
-        background: #f0f0f0;
-        font-weight: bold;
-        font-size: {f_letter}px;
-        color: #323232;
-    }}
-    .cel-canto {{
-        background: #e6e6e6;
-        font-weight: bold;
-        font-size: {f_letter + 2}px;
-    }}
-    .cel-col {{
-        background: #c5e0b4;
-        font-weight: bold;
-        font-size: {f_word}px;
-    }}
-    .cel-lin {{
-        background: #ffe699;
-        font-weight: bold;
-        font-size: {f_word}px;
-    }}
-    .cel-carta {{
-        font-weight: 900;
-        font-size: {f_coord}px;
-        min-height: {min_h}px;
-        transition: background 0.3s, color 0.3s;
-        letter-spacing: 0.5px;
-    }}
+        transition: transform 0.15s ease-out; }}
+    .cel {{ border: 3px solid #4a5568; padding: 10px 6px; text-align: center;
+        display: flex; align-items: center; justify-content: center;
+        min-height: {min_h}px; font-size: {f_word}px;
+        border-radius: 6px; user-select: none;
+        overflow: hidden; word-break: break-word; line-height: 1.15; }}
+    .cel-coord {{ background: #f0f0f0; font-weight: bold;
+        font-size: {f_letter}px; color: #323232; }}
+    .cel-canto {{ background: #e6e6e6; font-weight: bold; font-size: {f_letter + 2}px; }}
+    .cel-col {{ background: #c5e0b4; font-weight: bold; font-size: {f_word}px; }}
+    .cel-lin {{ background: #ffe699; font-weight: bold; font-size: {f_word}px; }}
+    .cel-carta {{ font-weight: 900; font-size: {f_coord}px;
+        min-height: {min_h}px; transition: background 0.3s, color 0.3s;
+        letter-spacing: 0.5px; }}
     .cel-carta.state-0 {{ background: #d9e1f2; color: #1e3c78; }}
     .cel-carta.state-1 {{ background: #1e3c78; color: #ffffff; }}
     .cel-carta.state-2 {{ background: #dc2626; color: #ffffff; }}
-    .cel-carta.state-3 {{
-        background: #cbd5e1; color: #64748b;
-        text-decoration: line-through; opacity: 0.7;
-    }}
+    .cel-carta.state-3 {{ background: #cbd5e1; color: #64748b;
+        text-decoration: line-through; opacity: 0.7; }}
 </style></head><body>
 
 <div class="placar">
-    <div class="placar-time">
-        <span class="placar-dot dot-b"></span>
+    <div class="placar-time"><span class="placar-dot dot-b"></span>
         <span class="placar-nome">{nome_time_1}</span>
-        <span class="placar-num blue">{p1}</span>
-    </div>
-    <div class="placar-time">
-        <span class="placar-dot dot-r"></span>
+        <span class="placar-num blue">{p1}</span></div>
+    <div class="placar-time"><span class="placar-dot dot-r"></span>
         <span class="placar-nome">{nome_time_2}</span>
-        <span class="placar-num red">{p2}</span>
-    </div>
-    <div class="placar-time">
-        <span class="placar-dot dot-x"></span>
+        <span class="placar-num red">{p2}</span></div>
+    <div class="placar-time"><span class="placar-dot dot-x"></span>
         <span class="placar-nome">Descartadas</span>
-        <span class="placar-num grey">{desc}</span>
-    </div>
+        <span class="placar-num grey">{desc}</span></div>
 </div>
 
 <div class="grid-wrap" id="grid-wrap">
@@ -622,7 +565,7 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
 
 
 # =====================================================
-# INTERFACE MOBILE
+# INTERFACE MOBILE (tirador)
 # =====================================================
 def render_mobile(sala_id):
     st.markdown("""
@@ -647,31 +590,77 @@ def render_mobile(sala_id):
     coord = dados.get("coord")
     estado = dados.get("estado", "aguardando")
     evento = dados.get("evento")
-    nome_turno = dados.get("nome_turno", "Time")
-    cor_turno = "#1e3c78" if dados.get("time_atual", 1) == 1 else "#dc2626"
+    time_atual = dados.get("time_atual", 1)
+    nome_t1 = dados.get("nome_time_1_fb", "Time 1")
+    nome_t2 = dados.get("nome_time_2_fb", "Time 2")
+    baralho_vazio = dados.get("baralho_vazio", False)
 
+    nome_turno = nome_t1 if time_atual == 1 else nome_t2
+    cor_turno = "#1e3c78" if time_atual == 1 else "#dc2626"
+    emoji_turno = "🔵" if time_atual == 1 else "🔴"
+
+    # ---- Banner de turno ----
     st.markdown(
         f"""
-        <div style="padding:10px 16px; background:{cor_turno}15;
-                    border-left:6px solid {cor_turno}; border-radius:8px;
-                    font-family:system-ui; margin-bottom:16px;">
-            <div style="font-size:11px;color:#64748b;
-                        text-transform:uppercase;letter-spacing:1px;">
+        <div style="padding:20px 24px; background:{cor_turno};
+                    border-radius:16px; text-align:center;
+                    font-family:system-ui; color:white;
+                    margin-bottom:20px;
+                    box-shadow: 0 6px 24px {cor_turno}55;">
+            <div style="font-size:12px; text-transform:uppercase;
+                        letter-spacing:3px; opacity:0.85; font-weight:bold;">
                 Vez de
             </div>
-            <div style="font-size:20px;font-weight:bold;color:{cor_turno};">
-                {nome_turno}
+            <div style="font-size:32px; font-weight:900;
+                        margin-top:6px; letter-spacing:1px;">
+                {emoji_turno} {nome_turno}
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    if not coord or estado == "aguardando":
-        st.info("⏳ Aguardando o dispositivo principal sortear uma carta...")
-        st.caption("Não feche esta página.")
+    # ---- Fim de jogo ----
+    if baralho_vazio and not coord:
+        st.success("🏁 Jogo encerrado! Todas as cartas foram sorteadas.")
         return
 
+    # ---- Aguardando sorteio ----
+    if not coord or estado == "aguardando":
+        st.markdown(
+            f"""
+            <div style="text-align:center; padding:40px 20px;
+                        background:#f8fafc; border:3px dashed #cbd5e1;
+                        border-radius:16px; font-family:system-ui;">
+                <div style="font-size:52px;">🎴</div>
+                <div style="font-size:16px; color:#64748b;
+                            margin-top:16px; font-weight:bold;">
+                    Pronto para sortear
+                </div>
+                <div style="font-size:13px; color:#94a3b8; margin-top:12px;">
+                    Toque no botão abaixo para sortear sua carta secreta
+                </div>
+                <div style="font-size:12px; color:#cbd5e1; margin-top:20px;">
+                    🔒 Só {nome_turno} deve estar vendo esta tela
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.write("")
+
+        if st.button("🎴 Sortear carta secreta",
+                     type="primary",
+                     use_container_width=True,
+                     key="btn_sortear_mobile"):
+            fb_patch(sala_id, {"solicitar_sorteio": _agora_ms()})
+            st.rerun()
+
+        st.caption("💡 Ou aguarde o operador do desktop sortear.")
+        return
+
+    # ---- Tirador já respondeu ----
     if evento:
         st.success("✅ Decisão registrada!")
         st.markdown(
@@ -679,14 +668,16 @@ def render_mobile(sala_id):
             <div style="text-align:center; padding:40px 20px;
                         background:#f1f5f9; border-radius:12px;
                         font-family:system-ui;">
-                <div style="font-size:14px;color:#64748b;">Você marcou</div>
+                <div style="font-size:14px;color:#64748b;">
+                    {nome_turno} marcou
+                </div>
                 <div style="font-size:32px;font-weight:bold;
                             color:{'#22c55e' if evento == 'acertou' else '#dc2626'};
                             margin-top:12px;">
                     {'✅ ACERTOU' if evento == 'acertou' else '❌ ERROU'}
                 </div>
                 <div style="font-size:13px;color:#94a3b8;margin-top:16px;">
-                    Aguardando próxima rodada...
+                    🔄 Passe o celular para o próximo time
                 </div>
             </div>
             """,
@@ -694,17 +685,19 @@ def render_mobile(sala_id):
         )
         return
 
+    # ---- Carta secreta ----
     st.markdown(
         f"""
         <div style="text-align:center; padding:30px 20px;
-                    background:#d9e1f2; border:4px solid #1e3c78;
+                    background:#d9e1f2; border:4px solid {cor_turno};
                     border-radius:16px; margin-bottom:20px;
                     font-family:system-ui;">
             <div style="font-size:13px;color:#64748b;
                         text-transform:uppercase;letter-spacing:1.5px;">
-                Sua carta secreta
+                Carta secreta de {nome_turno}
             </div>
-            <div style="font-size:120px;font-weight:bold;color:#1e3c78;
+            <div style="font-size:120px;font-weight:bold;
+                        color:#1e3c78;
                         letter-spacing:8px; line-height:1; margin:16px 0;">
                 {coord}
             </div>
@@ -716,6 +709,7 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
+    # ---- Timer ----
     timer_ativo = dados.get("timer_ativo", False)
     timer_iniciado_em = dados.get("timer_iniciado_em")
     tempo_total_seg = dados.get("tempo_total", 0)
@@ -761,6 +755,7 @@ def render_mobile(sala_id):
             )
             st.caption("🔄 Atualizando a cada 1.5s...")
 
+    # ---- Botões de resposta ----
     st.markdown("---")
     col_ok, col_err = st.columns(2)
     with col_ok:
@@ -771,7 +766,7 @@ def render_mobile(sala_id):
         if st.button("❌ Errou", use_container_width=True):
             fb_patch(sala_id, {"evento": "errou"})
             st.rerun()
-    st.caption("Clique assim que o time der a resposta.")
+    st.caption(f"Clique quando {nome_turno} der a resposta.")
 
 
 # =====================================================
@@ -795,6 +790,9 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 
+# =====================================================
+# ROTEADOR
+# =====================================================
 qp = st.query_params
 sala_qp = qp.get("sala")
 role_qp = qp.get("role")
@@ -805,10 +803,12 @@ if role_qp == "tirador" and sala_qp:
     st.stop()
 
 
+# =====================================================
+# DESKTOP
+# =====================================================
 st.title("🎲 Entre Linhas — Jogo Principal")
 st.caption("Biblioteca com **343 palavras**. Sorteie a grade, exiba o QR code e jogue com 2 times.")
 
-# ---- Mensagem de sucesso persistida (após rerun do sorteio) ----
 if st.session_state.msg_sucesso:
     st.success(st.session_state.msg_sucesso)
     st.session_state.msg_sucesso = None
@@ -873,14 +873,16 @@ with st.sidebar:
             st.session_state[k] = defaults[k]
         st.rerun()
 
-    # ---- QR CODE DO TIRADOR (dentro da sidebar) ----
     if st.session_state.sala_id:
         st.divider()
         st.subheader("📱 QR do Tirador")
         url_mobile = f"{APP_URL}?sala={st.session_state.sala_id}&role=tirador"
         st.image(gerar_qr_code(url_mobile), use_column_width=True)
         st.caption(f"Sala: **{st.session_state.sala_id}**")
-        st.caption("O tirador escaneia uma vez com o celular.")
+        st.caption(
+            "Escaneie **uma vez** com o celular. O celular mostrará "
+            "de quem é a vez — o time responsável pega o dispositivo na sua rodada."
+        )
 
 
 # =====================================================
@@ -924,13 +926,16 @@ if sortear_btn:
             "evento": None,
             "time_atual": 1,
             "nome_turno": st.session_state.nome_time_1,
+            "nome_time_1_fb": st.session_state.nome_time_1,
+            "nome_time_2_fb": st.session_state.nome_time_2,
             "criada_em": _agora_ms(),
             "timer_ativo": st.session_state.timer_ativo and tempo_total_seg > 0,
             "tempo_total": tempo_total_seg,
             "timer_iniciado_em": None,
+            "solicitar_sorteio": None,
+            "baralho_vazio": False,
         })
 
-        # ---- Mensagem persistida + rerun para o QR aparecer ----
         st.session_state.msg_sucesso = f"✅ Grade {tamanho}×{tamanho} pronta! Sala {sala_id}."
         st.rerun()
 
@@ -957,13 +962,41 @@ jogo_acabou = (len(deck) == 0 and carta_atual is None)
 
 
 # =====================================================
-# POLLING
+# POLLING (decisões do celular + sincronização do timer + solicitação de sorteio)
 # =====================================================
-if sala_id and fase == "decidindo":
+if sala_id and (fase == "decidindo" or fase == "aguardando"):
     st_autorefresh(interval=1500, key="desktop_poll")
     dados_fb = fb_get(sala_id)
     evento = dados_fb.get("evento")
     timer_fb = dados_fb.get("timer_iniciado_em")
+    solicitacao = dados_fb.get("solicitar_sorteio")
+
+    # Sincroniza baralho vazio
+    baralho_vazio_fb = dados_fb.get("baralho_vazio", False)
+    baralho_vazio_local = (len(deck) == 0)
+    if baralho_vazio_fb != baralho_vazio_local:
+        fb_patch(sala_id, {"baralho_vazio": baralho_vazio_local})
+
+    # ---- Solicitação de sorteio pelo celular ----
+    if solicitacao and fase == "aguardando":
+        if len(deck) > 0:
+            nova = deck[0]
+            st.session_state.carta_atual = nova
+            st.session_state.fase = "decidindo"
+            st.session_state.timer_rodando = False
+            st.session_state.tempo_pausado_segundos = None
+            fb_patch(sala_id, {
+                "coord": nova,
+                "estado": "sorteada",
+                "evento": None,
+                "time_atual": time_atual,
+                "nome_turno": nome_turno,
+                "timer_iniciado_em": None,
+                "solicitar_sorteio": None,
+            })
+        else:
+            fb_patch(sala_id, {"solicitar_sorteio": None})
+        st.rerun()
 
     if timer_fb and not st.session_state.timer_rodando and st.session_state.timer_ativo:
         st.session_state.turno_iniciado_em = timer_fb
@@ -1035,72 +1068,6 @@ with col_esq:
 
     st.divider()
 
-    if jogo_acabou:
-        col_n1, col_n2 = st.columns(2)
-        with col_n1:
-            if st.button("🔄 Nova partida (mesma grade)",
-                         type="primary", use_container_width=True):
-                coords = gerar_coordenadas(tam)
-                st.session_state.deck = coords
-                st.session_state.estados = {c: 0 for c in coords}
-                st.session_state.sorteadas = []
-                st.session_state.time_atual = 1
-                st.session_state.carta_atual = None
-                st.session_state.fase = "aguardando"
-                st.session_state.turno_iniciado_em = _agora_ms()
-                st.session_state.turno_contador += 1
-                st.session_state.timer_rodando = False
-                st.session_state.tempo_pausado_segundos = None
-                fb_patch(sala_id, {
-                    "coord": None, "evento": None,
-                    "estado": "aguardando",
-                    "timer_iniciado_em": None,
-                    "time_atual": 1,
-                    "nome_turno": nome_t1,
-                })
-                st.rerun()
-        with col_n2:
-            if st.button("🎲 Nova grade (novo sorteio)",
-                         use_container_width=True):
-                st.session_state.linhas = None
-                st.rerun()
-
-    elif fase == "aguardando":
-        st.caption("👉 O tirador escaneia o QR code na barra lateral. "
-                   "Depois clique abaixo para sortear a carta.")
-        if st.button("🎴 Sortear carta secreta", type="primary", use_container_width=True):
-            if not deck:
-                st.warning("Baralho vazio!")
-            else:
-                nova = deck[0]
-                st.session_state.carta_atual = nova
-                st.session_state.fase = "decidindo"
-                st.session_state.timer_rodando = False
-                st.session_state.tempo_pausado_segundos = None
-                fb_patch(sala_id, {
-                    "coord": nova,
-                    "estado": "sorteada",
-                    "evento": None,
-                    "time_atual": time_atual,
-                    "nome_turno": nome_turno,
-                    "timer_iniciado_em": None,
-                })
-                st.rerun()
-
-    elif fase == "decidindo":
-        st.info("⏳ **Carta em jogo** — aguardando o tirador responder no celular…")
-        st.caption("🔄 Atualizando automaticamente a cada 1.5s.")
-        with st.expander("🆘 Emergência: usar botões do desktop"):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("✅ Acertou (manual)", use_container_width=True):
-                    fb_patch(sala_id, {"evento": "acertou"})
-                    st.rerun()
-            with col_b:
-                if st.button("❌ Errou (manual)", use_container_width=True):
-                    fb_patch(sala_id, {"evento": "errou"})
-                    st.rerun()
-
     with st.expander(f"📜 Histórico ({len(st.session_state.sorteadas)} cartas)"):
         if st.session_state.sorteadas:
             for idx, c in enumerate(st.session_state.sorteadas, 1):
@@ -1112,11 +1079,11 @@ with col_esq:
 
 
 # =====================================================
-# COLUNA DIREITA
+# COLUNA DIREITA — QUADRANTES A, B, C e D
 # =====================================================
 with col_dir:
 
-    # ---------- QUADRANTE A ----------
+    # ---------- QUADRANTE A: TIME ----------
     if jogo_acabou:
         vencedor_a, _, _, _, cor_a = detectar_vencedor(estados, nome_t1, nome_t2)
         if vencedor_a == "t1":
@@ -1176,7 +1143,7 @@ with col_dir:
             unsafe_allow_html=True,
         )
 
-    # ---------- QUADRANTE B ----------
+    # ---------- QUADRANTE B: TIMER ----------
     st.markdown(
         """
         <div style="font-size:14px; color:#64748b;
@@ -1364,6 +1331,109 @@ with col_dir:
         """,
         unsafe_allow_html=True,
     )
+
+    # ---------- QUADRANTE D: AÇÃO DA RODADA ----------
+    st.markdown(
+        """
+        <div style="font-size:14px; color:#64748b;
+                    text-transform:uppercase; letter-spacing:3px;
+                    text-align:center; margin-top:24px; margin-bottom:10px;
+                    font-weight:bold;">
+            🎴 Ação da Rodada
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if jogo_acabou:
+        if st.button("🔄 Nova partida (mesma grade)",
+                     type="primary", use_container_width=True,
+                     key="nova_partida_painel"):
+            coords = gerar_coordenadas(tam)
+            st.session_state.deck = coords
+            st.session_state.estados = {c: 0 for c in coords}
+            st.session_state.sorteadas = []
+            st.session_state.time_atual = 1
+            st.session_state.carta_atual = None
+            st.session_state.fase = "aguardando"
+            st.session_state.turno_iniciado_em = _agora_ms()
+            st.session_state.turno_contador += 1
+            st.session_state.timer_rodando = False
+            st.session_state.tempo_pausado_segundos = None
+            fb_patch(sala_id, {
+                "coord": None, "evento": None,
+                "estado": "aguardando",
+                "timer_iniciado_em": None,
+                "time_atual": 1,
+                "nome_turno": nome_t1,
+                "solicitar_sorteio": None,
+                "baralho_vazio": False,
+            })
+            st.rerun()
+
+        if st.button("🎲 Nova grade (novo sorteio)",
+                     use_container_width=True,
+                     key="nova_grade_painel"):
+            st.session_state.linhas = None
+            st.rerun()
+
+    elif fase == "aguardando":
+        if st.button("🎴 SORTEAR CARTA SECRETA",
+                     type="primary",
+                     use_container_width=True,
+                     key="sortear_desktop_painel"):
+            if not deck:
+                st.warning("Baralho vazio!")
+            else:
+                nova = deck[0]
+                st.session_state.carta_atual = nova
+                st.session_state.fase = "decidindo"
+                st.session_state.timer_rodando = False
+                st.session_state.tempo_pausado_segundos = None
+                fb_patch(sala_id, {
+                    "coord": nova,
+                    "estado": "sorteada",
+                    "evento": None,
+                    "time_atual": time_atual,
+                    "nome_turno": nome_turno,
+                    "timer_iniciado_em": None,
+                })
+                st.rerun()
+
+        st.caption(
+            f"👉 Rodada do **{nome_turno}** — clique acima ou aguarde "
+            "o tirador sortear pelo celular."
+        )
+
+    elif fase == "decidindo":
+        st.markdown(
+            f"""
+            <div style="padding:20px; border-radius:12px;
+                        background:{cor_turno}15;
+                        border:3px dashed {cor_turno};
+                        text-align:center; font-family:system-ui;">
+                <div style="font-size:13px; color:#64748b;
+                            text-transform:uppercase; letter-spacing:2px;">
+                    ⏳ Carta em jogo
+                </div>
+                <div style="font-size:14px; color:#94a3b8; margin-top:8px;">
+                    Aguardando resposta de {nome_turno} no celular...
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        with st.expander("🆘 Emergência: usar botões do desktop"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ Acertou (manual)", use_container_width=True, key="manual_acerto_painel"):
+                    fb_patch(sala_id, {"evento": "acertou"})
+                    st.rerun()
+            with col_b:
+                if st.button("❌ Errou (manual)", use_container_width=True, key="manual_erro_painel"):
+                    fb_patch(sala_id, {"evento": "errou"})
+                    st.rerun()
 
 
 # =====================================================
