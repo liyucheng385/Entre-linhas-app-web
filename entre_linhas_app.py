@@ -1,8 +1,6 @@
 """
 Entre Linhas — Desktop + QR code para o tirador
-Layout em duas colunas:
-- Esquerda (66%): grade protagonista com auto-scale
-- Direita (33%): Time (A) + Cronômetro (B) + Cartas faltantes (C)
+Layout em duas colunas com auto-scale, cartas faltantes e mensagem persistida.
 """
 
 import io
@@ -33,7 +31,7 @@ st.set_page_config(
 
 
 # =====================================================
-# CSS GLOBAL — ajustes para TV
+# CSS GLOBAL
 # =====================================================
 st.markdown("""
 <style>
@@ -413,12 +411,11 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
 
 
 # =====================================================
-# GRID COM AUTO-SCALE (transform: scale via JS)
+# GRID COM AUTO-SCALE
 # =====================================================
 def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     tam = len(linhas)
 
-    # Tamanhos NATURAIS grandes — a escala é aplicada em JS
     tamanhos = {
         3: {"cell": 230, "coord": 65, "min_h": 100,
             "f_letter": 30, "f_word": 24, "f_coord": 48},
@@ -437,17 +434,14 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     f_word = sz["f_word"]
     f_coord = sz["f_coord"]
 
-    # Cabeçalho 1: letras
     header1 = '<div></div><div></div>'
     for j in range(1, tam + 1):
         header1 += f'<div class="cel cel-coord">{chr(64 + j)}</div>'
 
-    # Cabeçalho 2: canto + palavras-coluna
     header2 = '<div></div><div class="cel cel-canto">×</div>'
     for col in colunas:
         header2 += f'<div class="cel cel-col">{col}</div>'
 
-    # Linhas com cartas
     rows = ""
     for i, lin in enumerate(linhas, 1):
         rows += f'<div class="cel cel-coord">{i}</div>'
@@ -457,16 +451,14 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
             estado = estados.get(coord, 0)
             rows += f'<div class="cel cel-carta state-{estado}">{coord}</div>'
 
-    # Placar
     p1 = sum(1 for v in estados.values() if v == 1)
     p2 = sum(1 for v in estados.values() if v == 2)
     desc = sum(1 for v in estados.values() if v == 3)
 
     html = f"""
 <!DOCTYPE html><html><head><style>
-    body {{ margin: 0; font-family: system-ui, sans-serif; }}
+    html, body {{ margin: 0; padding: 0; font-family: system-ui, sans-serif; }}
 
-    /* ---- PLACAR ---- */
     .placar {{
         display: flex; gap: 24px; align-items: center;
         padding: 12px 16px; background: #f8fafc;
@@ -494,10 +486,9 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     .placar-num.red {{ color: #dc2626; }}
     .placar-num.grey {{ color: #64748b; }}
 
-    /* ---- GRID COM AUTO-SCALE ---- */
     .grid-wrap {{
         width: 100%;
-        overflow: hidden;
+        overflow: visible;
         position: relative;
     }}
     .grid-el {{
@@ -595,25 +586,24 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
         const wrap = document.getElementById('grid-wrap');
         const grid = document.getElementById('grid-el');
         if (!wrap || !grid) return;
-
-        // Reseta para medir tamanho natural
         grid.style.transform = 'scale(1)';
         wrap.style.height = 'auto';
-
         const naturalWidth = grid.offsetWidth;
         const naturalHeight = grid.offsetHeight;
         const containerWidth = wrap.clientWidth;
-
         let scale = 1;
         if (naturalWidth > containerWidth && containerWidth > 0) {{
             scale = containerWidth / naturalWidth;
         }}
-
         grid.style.transform = 'scale(' + scale + ')';
         wrap.style.height = (naturalHeight * scale) + 'px';
+        try {{
+            window.parent.postMessage({{
+                type: 'streamlit:setFrameHeight',
+                height: document.body.scrollHeight + 20
+            }}, '*');
+        }} catch(e) {{}}
     }}
-
-    // Roda várias vezes para garantir (iframe, resize, fontes carregadas)
     autoScale();
     setTimeout(autoScale, 30);
     setTimeout(autoScale, 100);
@@ -625,8 +615,9 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
 
 </body></html>
 """
-    # Altura máxima esperada (sem escala) — se escalar, sobra um pouco de espaço
-    altura = int(240 + tam * (min_h + 8))
+
+    alturas = {3: 950, 4: 1050, 5: 1150, 6: 1200}
+    altura = alturas.get(tam, 1150)
     components.html(html, height=altura, scrolling=False)
 
 
@@ -797,6 +788,7 @@ defaults = {
     "timer_mudo": False, "turno_iniciado_em": _agora_ms(), "turno_contador": 0,
     "timer_rodando": False,
     "tempo_pausado_segundos": None,
+    "msg_sucesso": None,
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -815,6 +807,11 @@ if role_qp == "tirador" and sala_qp:
 
 st.title("🎲 Entre Linhas — Jogo Principal")
 st.caption("Biblioteca com **343 palavras**. Sorteie a grade, exiba o QR code e jogue com 2 times.")
+
+# ---- Mensagem de sucesso persistida (após rerun do sorteio) ----
+if st.session_state.msg_sucesso:
+    st.success(st.session_state.msg_sucesso)
+    st.session_state.msg_sucesso = None
 
 
 # =====================================================
@@ -876,6 +873,7 @@ with st.sidebar:
             st.session_state[k] = defaults[k]
         st.rerun()
 
+    # ---- QR CODE DO TIRADOR (dentro da sidebar) ----
     if st.session_state.sala_id:
         st.divider()
         st.subheader("📱 QR do Tirador")
@@ -886,7 +884,7 @@ with st.sidebar:
 
 
 # =====================================================
-# SORTEIO
+# SORTEIO DA GRADE
 # =====================================================
 if sortear_btn:
     if len(palavras_usuario) < tamanho * 2:
@@ -931,7 +929,10 @@ if sortear_btn:
             "tempo_total": tempo_total_seg,
             "timer_iniciado_em": None,
         })
-        st.success(f"✅ Grade **{tamanho}×{tamanho}** pronta! Sala **{sala_id}**.")
+
+        # ---- Mensagem persistida + rerun para o QR aparecer ----
+        st.session_state.msg_sucesso = f"✅ Grade {tamanho}×{tamanho} pronta! Sala {sala_id}."
+        st.rerun()
 
 
 if st.session_state.linhas is None:
@@ -1111,11 +1112,11 @@ with col_esq:
 
 
 # =====================================================
-# COLUNA DIREITA — QUADRANTES A, B e C
+# COLUNA DIREITA
 # =====================================================
 with col_dir:
 
-    # ---------- QUADRANTE A: TIME ----------
+    # ---------- QUADRANTE A ----------
     if jogo_acabou:
         vencedor_a, _, _, _, cor_a = detectar_vencedor(estados, nome_t1, nome_t2)
         if vencedor_a == "t1":
@@ -1175,7 +1176,7 @@ with col_dir:
             unsafe_allow_html=True,
         )
 
-    # ---------- QUADRANTE B: TIMER ----------
+    # ---------- QUADRANTE B ----------
     st.markdown(
         """
         <div style="font-size:14px; color:#64748b;
