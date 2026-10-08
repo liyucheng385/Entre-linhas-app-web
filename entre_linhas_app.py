@@ -1,7 +1,5 @@
 """
-Entre Linhas — Desktop + QR único para o tirador
-Painel esquerdo: grade protagonista com auto-scale
-Painel direito: Time (A) + Cronômetro (B) + Cartas Faltantes (C) + Ação (D)
+Entre Linhas — Desktop + QR único para o tirador + Recuperação de sala
 """
 
 import io
@@ -185,6 +183,46 @@ def gerar_qr_code(url):
 
 
 # =====================================================
+# RECUPERAÇÃO DE SALA
+# =====================================================
+def recuperar_sala(sala_id):
+    """Reconstrói o session_state a partir dos dados salvos no Firebase."""
+    dados = fb_get(sala_id)
+    if not dados or "linhas_fb" not in dados:
+        return False
+
+    try:
+        st.session_state.sala_id = sala_id
+        st.session_state.tamanho_atual = dados.get("tamanho", 5)
+        st.session_state.linhas = dados.get("linhas_fb", [])
+        st.session_state.colunas = dados.get("colunas_fb", [])
+        st.session_state.deck = dados.get("deck_fb", [])
+        st.session_state.sorteadas = dados.get("sorteadas_fb", [])
+        st.session_state.estados = dados.get("estados_fb", {})
+
+        st.session_state.nome_time_1 = dados.get("nome_time_1_fb", "Time 1")
+        st.session_state.nome_time_2 = dados.get("nome_time_2_fb", "Time 2")
+
+        st.session_state.time_atual = dados.get("time_atual", 1)
+        st.session_state.carta_atual = dados.get("coord")
+        st.session_state.fase = dados.get("estado", "aguardando")
+
+        st.session_state.timer_ativo = dados.get("timer_ativo", False)
+        st.session_state.timer_minutos = dados.get("timer_minutos_fb", 2)
+        st.session_state.timer_segundos = dados.get("timer_segundos_fb", 0)
+        st.session_state.timer_mudo = dados.get("timer_mudo_fb", False)
+        st.session_state.timer_rodando = False
+        st.session_state.tempo_pausado_segundos = None
+        st.session_state.turno_iniciado_em = _agora_ms()
+        st.session_state.turno_contador += 1
+
+        st.session_state.msg_sucesso = f"✅ Sala {sala_id} recuperada!"
+        return True
+    except Exception:
+        return False
+
+
+# =====================================================
 # DETECÇÃO DE VITÓRIA
 # =====================================================
 def detectar_vencedor(estados, nome_t1, nome_t2):
@@ -206,21 +244,13 @@ def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
     pct2 = (p2 / total_computado * 100) if total_computado > 0 else 0
 
     if vencedor == "t1":
-        titulo = f"🏆 {nome_t1} VENCEU!"
-        subtitulo = f"{p1} × {p2} cartas conquistadas"
-        emoji = "🔵"
+        titulo, subtitulo, emoji = f"🏆 {nome_t1} VENCEU!", f"{p1} × {p2} cartas conquistadas", "🔵"
     elif vencedor == "t2":
-        titulo = f"🏆 {nome_t2} VENCEU!"
-        subtitulo = f"{p2} × {p1} cartas conquistadas"
-        emoji = "🔴"
+        titulo, subtitulo, emoji = f"🏆 {nome_t2} VENCEU!", f"{p2} × {p1} cartas conquistadas", "🔴"
     elif vencedor == "empate":
-        titulo = "🤝 EMPATE!"
-        subtitulo = f"{p1} × {p2} cartas conquistadas"
-        emoji = "⚪"
+        titulo, subtitulo, emoji = "🤝 EMPATE!", f"{p1} × {p2} cartas conquistadas", "⚪"
     else:
-        titulo = "🏁 FIM DE JOGO"
-        subtitulo = "Nenhuma carta foi conquistada"
-        emoji = "🎲"
+        titulo, subtitulo, emoji = "🏁 FIM DE JOGO", "Nenhuma carta foi conquistada", "🎲"
 
     st.markdown(
         f"""
@@ -230,17 +260,11 @@ def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
                     text-align: center; font-family: system-ui;
                     margin: 16px 0 24px 0;
                     box-shadow: 0 8px 32px {cor}30;">
-            <div style="font-size: 64px; line-height: 1; margin-bottom: 8px;">
-                {emoji}
-            </div>
-            <div style="font-size: 38px; font-weight: bold;
-                        color: {cor}; letter-spacing: 1px; line-height: 1.1;">
-                {titulo}
-            </div>
-            <div style="font-size: 20px; color: #64748b;
-                        margin-top: 12px; font-weight: 500;">
-                {subtitulo}
-            </div>
+            <div style="font-size: 64px; line-height: 1; margin-bottom: 8px;">{emoji}</div>
+            <div style="font-size: 38px; font-weight: bold; color: {cor};
+                        letter-spacing: 1px; line-height: 1.1;">{titulo}</div>
+            <div style="font-size: 20px; color: #64748b; margin-top: 12px;
+                        font-weight: 500;">{subtitulo}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -257,23 +281,17 @@ def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
                 <div style="font-size: 13px;
                             color: {('#ffffff' if vencedor == 't1' else '#64748b')};
                             text-transform: uppercase; letter-spacing: 1.5px;">
-                    🔵 {nome_t1}
-                </div>
+                    🔵 {nome_t1}</div>
                 <div style="font-size: 42px; font-weight: bold;
                             color: {('#ffffff' if vencedor == 't1' else '#1e3c78')};
-                            margin-top: 4px;">
-                    {p1}
-                </div>
+                            margin-top: 4px;">{p1}</div>
                 <div style="font-size: 12px;
                             color: {('#e0e7ff' if vencedor == 't1' else '#94a3b8')};
-                            margin-top: 4px;">
-                    {pct1:.0f}% das cartas
-                </div>
+                            margin-top: 4px;">{pct1:.0f}% das cartas</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
     with col_d:
         st.markdown(
             f"""
@@ -284,18 +302,13 @@ def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
                 <div style="font-size: 13px;
                             color: {('#ffffff' if vencedor == 't2' else '#64748b')};
                             text-transform: uppercase; letter-spacing: 1.5px;">
-                    🔴 {nome_t2}
-                </div>
+                    🔴 {nome_t2}</div>
                 <div style="font-size: 42px; font-weight: bold;
                             color: {('#ffffff' if vencedor == 't2' else '#dc2626')};
-                            margin-top: 4px;">
-                    {p2}
-                </div>
+                            margin-top: 4px;">{p2}</div>
                 <div style="font-size: 12px;
                             color: {('#fee2e2' if vencedor == 't2' else '#94a3b8')};
-                            margin-top: 4px;">
-                    {pct2:.0f}% das cartas
-                </div>
+                            margin-top: 4px;">{pct2:.0f}% das cartas</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -315,7 +328,7 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
     html = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; font-family: system-ui, sans-serif; }}
-        .timer-wrap {{ padding: 20px 20px; border-radius: 16px;
+        .timer-wrap {{ padding: 20px; border-radius: 16px;
             background: #22c55e15; border: 4px solid #22c55e;
             text-align: center; transition: background 0.3s, border-color 0.3s; }}
         .timer-tempo {{ font-size: 110px; font-weight: 900;
@@ -416,24 +429,15 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
 # =====================================================
 def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     tam = len(linhas)
-
     tamanhos = {
-        3: {"cell": 230, "coord": 65, "min_h": 100,
-            "f_letter": 30, "f_word": 24, "f_coord": 48},
-        4: {"cell": 200, "coord": 60, "min_h": 90,
-            "f_letter": 28, "f_word": 22, "f_coord": 42},
-        5: {"cell": 180, "coord": 55, "min_h": 82,
-            "f_letter": 26, "f_word": 20, "f_coord": 38},
-        6: {"cell": 160, "coord": 50, "min_h": 74,
-            "f_letter": 24, "f_word": 18, "f_coord": 34},
+        3: {"cell": 230, "coord": 65, "min_h": 100, "f_letter": 30, "f_word": 24, "f_coord": 48},
+        4: {"cell": 200, "coord": 60, "min_h": 90, "f_letter": 28, "f_word": 22, "f_coord": 42},
+        5: {"cell": 180, "coord": 55, "min_h": 82, "f_letter": 26, "f_word": 20, "f_coord": 38},
+        6: {"cell": 160, "coord": 50, "min_h": 74, "f_letter": 24, "f_word": 18, "f_coord": 34},
     }
     sz = tamanhos.get(tam, tamanhos[5])
-    cell = sz["cell"]
-    coord_w = sz["coord"]
-    min_h = sz["min_h"]
-    f_letter = sz["f_letter"]
-    f_word = sz["f_word"]
-    f_coord = sz["f_coord"]
+    cell, coord_w, min_h = sz["cell"], sz["coord"], sz["min_h"]
+    f_letter, f_word, f_coord = sz["f_letter"], sz["f_word"], sz["f_coord"]
 
     header1 = '<div></div><div></div>'
     for j in range(1, tam + 1):
@@ -462,27 +466,22 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     .placar {{ display: flex; gap: 24px; align-items: center;
         padding: 12px 16px; background: #f8fafc;
         border: 2px solid #cbd5e1; border-radius: 10px;
-        margin-bottom: 14px; font-size: 16px; font-weight: 600;
-        flex-wrap: wrap; }}
+        margin-bottom: 14px; font-size: 16px; font-weight: 600; flex-wrap: wrap; }}
     .placar-time {{ display: flex; align-items: center; gap: 8px; }}
     .placar-dot {{ width: 22px; height: 22px; border-radius: 4px;
         border: 2px solid #4a5568; flex-shrink: 0; }}
-    .dot-b {{ background: #1e3c78; }}
-    .dot-r {{ background: #dc2626; }}
+    .dot-b {{ background: #1e3c78; }} .dot-r {{ background: #dc2626; }}
     .dot-x {{ background: #94a3b8; }}
     .placar-nome {{ font-size: 15px; max-width: 180px;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-    .placar-num {{ font-size: 26px; min-width: 34px;
-        text-align: center; font-weight: bold; }}
-    .placar-num.blue {{ color: #1e3c78; }}
-    .placar-num.red {{ color: #dc2626; }}
+    .placar-num {{ font-size: 26px; min-width: 34px; text-align: center; font-weight: bold; }}
+    .placar-num.blue {{ color: #1e3c78; }} .placar-num.red {{ color: #dc2626; }}
     .placar-num.grey {{ color: #64748b; }}
     .grid-wrap {{ width: 100%; overflow: visible; position: relative; }}
     .grid-el {{ display: grid;
         grid-template-columns: {coord_w}px {cell}px repeat({tam}, {cell}px);
         gap: 6px; width: fit-content;
-        transform-origin: top left;
-        transition: transform 0.15s ease-out; }}
+        transform-origin: top left; transition: transform 0.15s ease-out; }}
     .cel {{ border: 3px solid #4a5568; padding: 10px 6px; text-align: center;
         display: flex; align-items: center; justify-content: center;
         min-height: {min_h}px; font-size: {f_word}px;
@@ -502,7 +501,6 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     .cel-carta.state-3 {{ background: #cbd5e1; color: #64748b;
         text-decoration: line-through; opacity: 0.7; }}
 </style></head><body>
-
 <div class="placar">
     <div class="placar-time"><span class="placar-dot dot-b"></span>
         <span class="placar-nome">{nome_time_1}</span>
@@ -514,7 +512,6 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
         <span class="placar-nome">Descartadas</span>
         <span class="placar-num grey">{desc}</span></div>
 </div>
-
 <div class="grid-wrap" id="grid-wrap">
     <div class="grid-el" id="grid-el">
         {header1}
@@ -522,7 +519,6 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
         {rows}
     </div>
 </div>
-
 <script>
 (function() {{
     function autoScale() {{
@@ -555,17 +551,14 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     window.addEventListener('resize', autoScale);
 }})();
 </script>
-
 </body></html>
 """
-
     alturas = {3: 950, 4: 1050, 5: 1150, 6: 1200}
-    altura = alturas.get(tam, 1150)
-    components.html(html, height=altura, scrolling=False)
+    components.html(html, height=alturas.get(tam, 1150), scrolling=False)
 
 
 # =====================================================
-# INTERFACE MOBILE (tirador)
+# INTERFACE MOBILE
 # =====================================================
 def render_mobile(sala_id):
     st.markdown("""
@@ -599,14 +592,12 @@ def render_mobile(sala_id):
     cor_turno = "#1e3c78" if time_atual == 1 else "#dc2626"
     emoji_turno = "🔵" if time_atual == 1 else "🔴"
 
-    # ---- Banner de turno ----
     st.markdown(
         f"""
         <div style="padding:20px 24px; background:{cor_turno};
                     border-radius:16px; text-align:center;
                     font-family:system-ui; color:white;
-                    margin-bottom:20px;
-                    box-shadow: 0 6px 24px {cor_turno}55;">
+                    margin-bottom:20px; box-shadow: 0 6px 24px {cor_turno}55;">
             <div style="font-size:12px; text-transform:uppercase;
                         letter-spacing:3px; opacity:0.85; font-weight:bold;">
                 Vez de
@@ -620,12 +611,10 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
-    # ---- Fim de jogo ----
     if baralho_vazio and not coord:
         st.success("🏁 Jogo encerrado! Todas as cartas foram sorteadas.")
         return
 
-    # ---- Aguardando sorteio ----
     if not coord or estado == "aguardando":
         st.markdown(
             f"""
@@ -649,18 +638,14 @@ def render_mobile(sala_id):
         )
 
         st.write("")
-
-        if st.button("🎴 Sortear carta secreta",
-                     type="primary",
-                     use_container_width=True,
-                     key="btn_sortear_mobile"):
+        if st.button("🎴 Sortear carta secreta", type="primary",
+                     use_container_width=True, key="btn_sortear_mobile"):
             fb_patch(sala_id, {"solicitar_sorteio": _agora_ms()})
             st.rerun()
 
         st.caption("💡 Ou aguarde o operador do desktop sortear.")
         return
 
-    # ---- Tirador já respondeu ----
     if evento:
         st.success("✅ Decisão registrada!")
         st.markdown(
@@ -668,9 +653,7 @@ def render_mobile(sala_id):
             <div style="text-align:center; padding:40px 20px;
                         background:#f1f5f9; border-radius:12px;
                         font-family:system-ui;">
-                <div style="font-size:14px;color:#64748b;">
-                    {nome_turno} marcou
-                </div>
+                <div style="font-size:14px;color:#64748b;">{nome_turno} marcou</div>
                 <div style="font-size:32px;font-weight:bold;
                             color:{'#22c55e' if evento == 'acertou' else '#dc2626'};
                             margin-top:12px;">
@@ -685,7 +668,6 @@ def render_mobile(sala_id):
         )
         return
 
-    # ---- Carta secreta ----
     st.markdown(
         f"""
         <div style="text-align:center; padding:30px 20px;
@@ -709,7 +691,6 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
-    # ---- Timer ----
     timer_ativo = dados.get("timer_ativo", False)
     timer_iniciado_em = dados.get("timer_iniciado_em")
     tempo_total_seg = dados.get("tempo_total", 0)
@@ -724,8 +705,7 @@ def render_mobile(sala_id):
         else:
             decorrido_ms = _agora_ms() - timer_iniciado_em
             restante_seg = max(0, int(tempo_total_seg - decorrido_ms / 1000))
-            mm = restante_seg // 60
-            ss = restante_seg % 60
+            mm, ss = restante_seg // 60, restante_seg % 60
             if restante_seg == 0:
                 cor, icone, texto_estado = "#dc2626", "⏰", "Tempo esgotado"
             elif restante_seg <= tempo_total_seg * 0.2:
@@ -755,7 +735,6 @@ def render_mobile(sala_id):
             )
             st.caption("🔄 Atualizando a cada 1.5s...")
 
-    # ---- Botões de resposta ----
     st.markdown("---")
     col_ok, col_err = st.columns(2)
     with col_ok:
@@ -797,10 +776,15 @@ qp = st.query_params
 sala_qp = qp.get("sala")
 role_qp = qp.get("role")
 
+# MODO MOBILE
 if role_qp == "tirador" and sala_qp:
     st.title("🎴 Controle do Tirador")
     render_mobile(sala_qp.upper())
     st.stop()
+
+# RECUPERAÇÃO AUTOMÁTICA POR URL
+if sala_qp and st.session_state.sala_id is None:
+    recuperar_sala(sala_qp.upper())
 
 
 # =====================================================
@@ -851,7 +835,6 @@ with st.sidebar:
             if st.button(icone, use_container_width=True):
                 st.session_state.timer_mudo = not st.session_state.timer_mudo
                 st.rerun()
-        st.caption("▶️ Inicie pelo **celular do tirador** ou pelos botões ao lado.")
 
     st.divider()
     st.subheader("📚 Biblioteca")
@@ -871,18 +854,42 @@ with st.sidebar:
             fb_delete(st.session_state.sala_id)
         for k in defaults:
             st.session_state[k] = defaults[k]
+        st.query_params.clear()
         st.rerun()
 
+    # ---- RECUPERAR SALA ----
+    st.divider()
+    st.subheader("🔁 Recuperar Sala")
+    st.caption("Perdeu a sala? Cole o código para voltar.")
+    codigo_rec = st.text_input(
+        "Código da sala",
+        max_chars=8,
+        placeholder="Ex.: ABC12345",
+        key="input_recuperar",
+    ).upper().strip()
+
+    if st.button("🔓 Recuperar", use_container_width=True, key="btn_recuperar"):
+        if not codigo_rec:
+            st.warning("Digite o código da sala.")
+        else:
+            dados_teste = fb_get(codigo_rec)
+            if not dados_teste or "linhas_fb" not in dados_teste:
+                st.error("Sala não encontrada ou dados incompletos.")
+            else:
+                if recuperar_sala(codigo_rec):
+                    st.query_params["sala"] = codigo_rec
+                    st.rerun()
+                else:
+                    st.error("Erro ao recuperar sala.")
+
+    # ---- QR CODE ----
     if st.session_state.sala_id:
         st.divider()
         st.subheader("📱 QR do Tirador")
         url_mobile = f"{APP_URL}?sala={st.session_state.sala_id}&role=tirador"
         st.image(gerar_qr_code(url_mobile), use_column_width=True)
         st.caption(f"Sala: **{st.session_state.sala_id}**")
-        st.caption(
-            "Escaneie **uma vez** com o celular. O celular mostrará "
-            "de quem é a vez — o time responsável pega o dispositivo na sua rodada."
-        )
+        st.caption("Escaneie **uma vez** com o celular.")
 
 
 # =====================================================
@@ -934,9 +941,20 @@ if sortear_btn:
             "timer_iniciado_em": None,
             "solicitar_sorteio": None,
             "baralho_vazio": False,
+            # Persistência para recuperação
+            "tamanho": tamanho,
+            "linhas_fb": linhas,
+            "colunas_fb": colunas,
+            "deck_fb": coords,
+            "sorteadas_fb": [],
+            "estados_fb": {c: 0 for c in coords},
+            "timer_minutos_fb": st.session_state.timer_minutos,
+            "timer_segundos_fb": st.session_state.timer_segundos,
+            "timer_mudo_fb": st.session_state.timer_mudo,
         })
 
         st.session_state.msg_sucesso = f"✅ Grade {tamanho}×{tamanho} pronta! Sala {sala_id}."
+        st.query_params["sala"] = sala_id
         st.rerun()
 
 
@@ -962,7 +980,7 @@ jogo_acabou = (len(deck) == 0 and carta_atual is None)
 
 
 # =====================================================
-# POLLING (decisões do celular + sincronização do timer + solicitação de sorteio)
+# POLLING
 # =====================================================
 if sala_id and (fase == "decidindo" or fase == "aguardando"):
     st_autorefresh(interval=1500, key="desktop_poll")
@@ -971,13 +989,11 @@ if sala_id and (fase == "decidindo" or fase == "aguardando"):
     timer_fb = dados_fb.get("timer_iniciado_em")
     solicitacao = dados_fb.get("solicitar_sorteio")
 
-    # Sincroniza baralho vazio
     baralho_vazio_fb = dados_fb.get("baralho_vazio", False)
     baralho_vazio_local = (len(deck) == 0)
     if baralho_vazio_fb != baralho_vazio_local:
         fb_patch(sala_id, {"baralho_vazio": baralho_vazio_local})
 
-    # ---- Solicitação de sorteio pelo celular ----
     if solicitacao and fase == "aguardando":
         if len(deck) > 0:
             nova = deck[0]
@@ -986,12 +1002,9 @@ if sala_id and (fase == "decidindo" or fase == "aguardando"):
             st.session_state.timer_rodando = False
             st.session_state.tempo_pausado_segundos = None
             fb_patch(sala_id, {
-                "coord": nova,
-                "estado": "sorteada",
-                "evento": None,
-                "time_atual": time_atual,
-                "nome_turno": nome_turno,
-                "timer_iniciado_em": None,
+                "coord": nova, "estado": "sorteada",
+                "evento": None, "time_atual": time_atual,
+                "nome_turno": nome_turno, "timer_iniciado_em": None,
                 "solicitar_sorteio": None,
             })
         else:
@@ -1010,17 +1023,25 @@ if sala_id and (fase == "decidindo" or fase == "aguardando"):
         st.session_state.estados = estados
         st.session_state.deck = deck[1:]
         st.session_state.sorteadas = st.session_state.sorteadas + [carta_atual]
-        st.session_state.time_atual = 2 if time_atual == 1 else 1
+
+        novo_time = 2 if time_atual == 1 else 1
+        novo_nome = nome_t2 if novo_time == 2 else nome_t1
+
+        st.session_state.time_atual = novo_time
         st.session_state.carta_atual = None
         st.session_state.fase = "aguardando"
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
         st.session_state.timer_rodando = False
         st.session_state.tempo_pausado_segundos = None
+
         fb_patch(sala_id, {
-            "evento": None, "coord": None,
-            "estado": "aguardando",
+            "evento": None, "coord": None, "estado": "aguardando",
             "timer_iniciado_em": None,
+            "time_atual": novo_time, "nome_turno": novo_nome,
+            "deck_fb": st.session_state.deck,
+            "sorteadas_fb": st.session_state.sorteadas,
+            "estados_fb": estados,
         })
         st.rerun()
 
@@ -1029,17 +1050,25 @@ if sala_id and (fase == "decidindo" or fase == "aguardando"):
         st.session_state.estados = estados
         st.session_state.deck = deck[1:]
         st.session_state.sorteadas = st.session_state.sorteadas + [carta_atual]
-        st.session_state.time_atual = 2 if time_atual == 1 else 1
+
+        novo_time = 2 if time_atual == 1 else 1
+        novo_nome = nome_t2 if novo_time == 2 else nome_t1
+
+        st.session_state.time_atual = novo_time
         st.session_state.carta_atual = None
         st.session_state.fase = "aguardando"
         st.session_state.turno_iniciado_em = _agora_ms()
         st.session_state.turno_contador += 1
         st.session_state.timer_rodando = False
         st.session_state.tempo_pausado_segundos = None
+
         fb_patch(sala_id, {
-            "evento": None, "coord": None,
-            "estado": "aguardando",
+            "evento": None, "coord": None, "estado": "aguardando",
             "timer_iniciado_em": None,
+            "time_atual": novo_time, "nome_turno": novo_nome,
+            "deck_fb": st.session_state.deck,
+            "sorteadas_fb": st.session_state.sorteadas,
+            "estados_fb": estados,
         })
         st.rerun()
 
@@ -1050,9 +1079,6 @@ if sala_id and (fase == "decidindo" or fase == "aguardando"):
 col_esq, col_dir = st.columns([2, 1], gap="large")
 
 
-# =====================================================
-# COLUNA ESQUERDA — GRADE
-# =====================================================
 with col_esq:
     if jogo_acabou:
         vencedor, p1, p2, desc, cor_v = detectar_vencedor(estados, nome_t1, nome_t2)
@@ -1063,7 +1089,6 @@ with col_esq:
         unsafe_allow_html=True,
     )
     st.caption("🔵 Time 1 · 🔴 Time 2 · ⚪ cinza = descartada")
-
     render_grid_estados(linhas, colunas, estados, nome_t1, nome_t2)
 
     st.divider()
@@ -1078,26 +1103,18 @@ with col_esq:
             st.caption("Nenhuma carta sorteada ainda.")
 
 
-# =====================================================
-# COLUNA DIREITA — QUADRANTES A, B, C e D
-# =====================================================
 with col_dir:
-
-    # ---------- QUADRANTE A: TIME ----------
+    # QUADRANTE A
     if jogo_acabou:
         vencedor_a, _, _, _, cor_a = detectar_vencedor(estados, nome_t1, nome_t2)
         if vencedor_a == "t1":
-            label_time = nome_t1
-            emoji_time = "🏆🔵"
+            label_time, emoji_time = nome_t1, "🏆🔵"
         elif vencedor_a == "t2":
-            label_time = nome_t2
-            emoji_time = "🏆🔴"
+            label_time, emoji_time = nome_t2, "🏆🔴"
         elif vencedor_a == "empate":
-            label_time = "Empate"
-            emoji_time = "🤝"
+            label_time, emoji_time = "Empate", "🤝"
         else:
-            label_time = "—"
-            emoji_time = "🏁"
+            label_time, emoji_time = "—", "🏁"
 
         st.markdown(
             f"""
@@ -1107,15 +1124,12 @@ with col_dir:
                         margin-bottom:16px; box-shadow: 0 3px 12px {cor_a}22;">
                 <div style="font-size:13px;color:#64748b;
                             text-transform:uppercase;letter-spacing:3px;
-                            font-weight:bold;">
-                    Fim de jogo
-                </div>
+                            font-weight:bold;">Fim de jogo</div>
                 <div style="font-size:44px;font-weight:900;
                             color:{cor_a};margin-top:10px;
                             line-height:1.05;letter-spacing:1px;
                             text-shadow: 0 3px 14px {cor_a}22;">
-                    {emoji_time} {label_time}
-                </div>
+                    {emoji_time} {label_time}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1129,31 +1143,25 @@ with col_dir:
                         margin-bottom:16px; box-shadow: 0 3px 12px {cor_turno}22;">
                 <div style="font-size:13px;color:#64748b;
                             text-transform:uppercase;letter-spacing:3px;
-                            font-weight:bold;">
-                    Rodada do
-                </div>
+                            font-weight:bold;">Rodada do</div>
                 <div style="font-size:44px;font-weight:900;
                             color:{cor_turno};margin-top:10px;
                             line-height:1.05;letter-spacing:1px;
                             text-shadow: 0 3px 14px {cor_turno}22;">
-                    {nome_turno}
-                </div>
+                    {nome_turno}</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    # ---------- QUADRANTE B: TIMER ----------
-    st.markdown(
-        """
-        <div style="font-size:14px; color:#64748b;
-                    text-transform:uppercase; letter-spacing:3px;
-                    text-align:center; margin-bottom:10px; font-weight:bold;">
+    # QUADRANTE B - TIMER
+    st.markdown("""
+        <div style="font-size:14px; color:#64748b; text-transform:uppercase;
+                    letter-spacing:3px; text-align:center;
+                    margin-bottom:10px; font-weight:bold;">
             ⏱️ Cronômetro
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     if jogo_acabou:
         st.info("🏁 Jogo encerrado.")
@@ -1173,28 +1181,23 @@ with col_dir:
                 )
             else:
                 pct = (restante_exibir / tempo_total) * 100 if tempo_total > 0 else 0
-                if pct > 50:
-                    cor = "#22c55e"
-                elif pct > 20:
-                    cor = "#eab308"
-                else:
-                    cor = "#dc2626"
+                if pct > 50: cor = "#22c55e"
+                elif pct > 20: cor = "#eab308"
+                else: cor = "#dc2626"
                 st.markdown(
                     f"""
-                    <div style="padding:20px 20px; border-radius:16px;
+                    <div style="padding:20px; border-radius:16px;
                                 background:{cor}15; border:4px solid {cor};
                                 text-align:center; font-family:system-ui;">
                         <div style="font-size:100px;font-weight:900;color:{cor};
                                     font-variant-numeric:tabular-nums;line-height:1;
                                     letter-spacing:3px;
                                     text-shadow: 0 3px 14px rgba(0,0,0,0.06);">
-                            {restante_exibir // 60:02d}:{restante_exibir % 60:02d}
-                        </div>
+                            {restante_exibir // 60:02d}:{restante_exibir % 60:02d}</div>
                         <div style="font-size:13px;color:#64748b;
                                     text-transform:uppercase;letter-spacing:2px;
                                     margin-top:8px;">
-                            {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}
-                        </div>
+                            {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}</div>
                         <div style="width:100%;height:14px;background:#e2e8f0;
                                     border-radius:7px;overflow:hidden;margin-top:16px;">
                             <div style="width:{pct}%;height:100%;background:{cor};"></div>
@@ -1215,15 +1218,13 @@ with col_dir:
                         else:
                             segundos_decorridos = tempo_total - pausado_seg
                             st.session_state.turno_iniciado_em = (
-                                _agora_ms() - (segundos_decorridos * 1000)
-                            )
+                                _agora_ms() - (segundos_decorridos * 1000))
                         st.session_state.tempo_pausado_segundos = None
                         st.session_state.timer_rodando = True
                         st.session_state.turno_contador += 1
                         if sala_id:
                             fb_patch(sala_id, {
-                                "timer_iniciado_em": st.session_state.turno_iniciado_em
-                            })
+                                "timer_iniciado_em": st.session_state.turno_iniciado_em})
                         st.rerun()
                 else:
                     if st.button("⏸️ Pausar", use_container_width=True, key="timer_pause"):
@@ -1243,63 +1244,43 @@ with col_dir:
                     st.rerun()
 
             if rodando:
-                st.markdown(
-                    "<div style='text-align:center;color:#22c55e;"
+                st.markdown("<div style='text-align:center;color:#22c55e;"
                     "font-weight:bold;padding-top:8px;font-size:15px;'>"
-                    "🟢 Cronômetro rodando</div>",
-                    unsafe_allow_html=True,
-                )
+                    "🟢 Cronômetro rodando</div>", unsafe_allow_html=True)
             elif pausado_seg is not None:
-                st.markdown(
-                    "<div style='text-align:center;color:#eab308;"
+                st.markdown("<div style='text-align:center;color:#eab308;"
                     "font-weight:bold;padding-top:8px;font-size:15px;'>"
-                    "⏸️ Pausado</div>",
-                    unsafe_allow_html=True,
-                )
+                    "⏸️ Pausado</div>", unsafe_allow_html=True)
             else:
-                st.markdown(
-                    f"<div style='text-align:center;color:#64748b;"
+                st.markdown(f"<div style='text-align:center;color:#64748b;"
                     f"font-weight:bold;padding-top:8px;font-size:15px;'>"
                     f"⚪ Aguardando início ({tempo_total // 60:02d}:{tempo_total % 60:02d})</div>",
-                    unsafe_allow_html=True,
-                )
+                    unsafe_allow_html=True)
         else:
             st.info("Configure minutos ou segundos na barra lateral.")
     else:
         st.info("⏱️ Cronômetro desativado.")
 
-    # ---------- QUADRANTE C: CARTAS FALTANTES ----------
-    st.markdown(
-        """
-        <div style="font-size:14px; color:#64748b;
-                    text-transform:uppercase; letter-spacing:3px;
-                    text-align:center; margin-top:24px; margin-bottom:10px;
-                    font-weight:bold;">
+    # QUADRANTE C - CARTAS FALTANTES
+    st.markdown("""
+        <div style="font-size:14px; color:#64748b; text-transform:uppercase;
+                    letter-spacing:3px; text-align:center;
+                    margin-top:24px; margin-bottom:10px; font-weight:bold;">
             📊 Cartas Faltantes
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     faltantes = len(deck)
     pct_restante = (faltantes / total_cartas) * 100 if total_cartas > 0 else 0
 
     if faltantes == 0:
-        cor_f = "#22c55e"
-        icone_f = "🏁"
-        label_f = "Baralho vazio"
+        cor_f, icone_f, label_f = "#22c55e", "🏁", "Baralho vazio"
     elif pct_restante > 50:
-        cor_f = "#22c55e"
-        icone_f = "🟢"
-        label_f = "Ainda tem muito jogo"
+        cor_f, icone_f, label_f = "#22c55e", "🟢", "Ainda tem muito jogo"
     elif pct_restante > 20:
-        cor_f = "#eab308"
-        icone_f = "🟡"
-        label_f = "Reta final chegando"
+        cor_f, icone_f, label_f = "#eab308", "🟡", "Reta final chegando"
     else:
-        cor_f = "#dc2626"
-        icone_f = "🔴"
-        label_f = "Últimas cartas!"
+        cor_f, icone_f, label_f = "#dc2626", "🔴", "Últimas cartas!"
 
     sorteadas_qtd = len(st.session_state.sorteadas)
 
@@ -1311,44 +1292,35 @@ with col_dir:
                     box-shadow: 0 3px 12px {cor_f}22;">
             <div style="font-size:90px; font-weight:900; color:{cor_f};
                         line-height:1; font-variant-numeric:tabular-nums;
-                        letter-spacing:2px;
-                        text-shadow: 0 3px 14px {cor_f}22;">
-                {faltantes}
-            </div>
+                        letter-spacing:2px; text-shadow: 0 3px 14px {cor_f}22;">
+                {faltantes}</div>
             <div style="font-size:13px; color:#64748b;
                         text-transform:uppercase; letter-spacing:2px;
                         margin-top:8px; font-weight:bold;">
-                {icone_f} cartas no baralho
-            </div>
+                {icone_f} cartas no baralho</div>
             <div style="width:100%; height:14px; background:#e2e8f0;
                         border-radius:7px; overflow:hidden; margin-top:16px;">
                 <div style="width:{pct_restante}%; height:100%; background:{cor_f};"></div>
             </div>
             <div style="font-size:12px; color:#94a3b8; margin-top:10px;">
-                {sorteadas_qtd} de {total_cartas} já sorteadas — {label_f}
-            </div>
+                {sorteadas_qtd} de {total_cartas} já sorteadas — {label_f}</div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # ---------- QUADRANTE D: AÇÃO DA RODADA ----------
-    st.markdown(
-        """
-        <div style="font-size:14px; color:#64748b;
-                    text-transform:uppercase; letter-spacing:3px;
-                    text-align:center; margin-top:24px; margin-bottom:10px;
-                    font-weight:bold;">
+    # QUADRANTE D - AÇÃO
+    st.markdown("""
+        <div style="font-size:14px; color:#64748b; text-transform:uppercase;
+                    letter-spacing:3px; text-align:center;
+                    margin-top:24px; margin-bottom:10px; font-weight:bold;">
             🎴 Ação da Rodada
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     if jogo_acabou:
-        if st.button("🔄 Nova partida (mesma grade)",
-                     type="primary", use_container_width=True,
-                     key="nova_partida_painel"):
+        if st.button("🔄 Nova partida (mesma grade)", type="primary",
+                     use_container_width=True, key="nova_partida_painel"):
             coords = gerar_coordenadas(tam)
             st.session_state.deck = coords
             st.session_state.estados = {c: 0 for c in coords}
@@ -1361,27 +1333,25 @@ with col_dir:
             st.session_state.timer_rodando = False
             st.session_state.tempo_pausado_segundos = None
             fb_patch(sala_id, {
-                "coord": None, "evento": None,
-                "estado": "aguardando",
-                "timer_iniciado_em": None,
-                "time_atual": 1,
-                "nome_turno": nome_t1,
-                "solicitar_sorteio": None,
+                "coord": None, "evento": None, "estado": "aguardando",
+                "timer_iniciado_em": None, "time_atual": 1,
+                "nome_turno": nome_t1, "solicitar_sorteio": None,
                 "baralho_vazio": False,
+                "deck_fb": coords,
+                "sorteadas_fb": [],
+                "estados_fb": {c: 0 for c in coords},
             })
             st.rerun()
 
-        if st.button("🎲 Nova grade (novo sorteio)",
-                     use_container_width=True,
+        if st.button("🎲 Nova grade (novo sorteio)", use_container_width=True,
                      key="nova_grade_painel"):
             st.session_state.linhas = None
+            st.query_params.clear()
             st.rerun()
 
     elif fase == "aguardando":
-        if st.button("🎴 SORTEAR CARTA SECRETA",
-                     type="primary",
-                     use_container_width=True,
-                     key="sortear_desktop_painel"):
+        if st.button("🎴 SORTEAR CARTA SECRETA", type="primary",
+                     use_container_width=True, key="sortear_desktop_painel"):
             if not deck:
                 st.warning("Baralho vazio!")
             else:
@@ -1391,19 +1361,14 @@ with col_dir:
                 st.session_state.timer_rodando = False
                 st.session_state.tempo_pausado_segundos = None
                 fb_patch(sala_id, {
-                    "coord": nova,
-                    "estado": "sorteada",
-                    "evento": None,
-                    "time_atual": time_atual,
-                    "nome_turno": nome_turno,
+                    "coord": nova, "estado": "sorteada", "evento": None,
+                    "time_atual": time_atual, "nome_turno": nome_turno,
                     "timer_iniciado_em": None,
                 })
                 st.rerun()
 
-        st.caption(
-            f"👉 Rodada do **{nome_turno}** — clique acima ou aguarde "
-            "o tirador sortear pelo celular."
-        )
+        st.caption(f"👉 Rodada do **{nome_turno}** — clique acima ou aguarde "
+                   "o tirador sortear pelo celular.")
 
     elif fase == "decidindo":
         st.markdown(
@@ -1414,11 +1379,9 @@ with col_dir:
                         text-align:center; font-family:system-ui;">
                 <div style="font-size:13px; color:#64748b;
                             text-transform:uppercase; letter-spacing:2px;">
-                    ⏳ Carta em jogo
-                </div>
+                    ⏳ Carta em jogo</div>
                 <div style="font-size:14px; color:#94a3b8; margin-top:8px;">
-                    Aguardando resposta de {nome_turno} no celular...
-                </div>
+                    Aguardando resposta de {nome_turno} no celular...</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1427,18 +1390,17 @@ with col_dir:
         with st.expander("🆘 Emergência: usar botões do desktop"):
             col_a, col_b = st.columns(2)
             with col_a:
-                if st.button("✅ Acertou (manual)", use_container_width=True, key="manual_acerto_painel"):
+                if st.button("✅ Acertou (manual)", use_container_width=True,
+                             key="manual_acerto_painel"):
                     fb_patch(sala_id, {"evento": "acertou"})
                     st.rerun()
             with col_b:
-                if st.button("❌ Errou (manual)", use_container_width=True, key="manual_erro_painel"):
+                if st.button("❌ Errou (manual)", use_container_width=True,
+                             key="manual_erro_painel"):
                     fb_patch(sala_id, {"evento": "errou"})
                     st.rerun()
 
 
-# =====================================================
-# RODAPÉ
-# =====================================================
 st.divider()
 st.caption(
     "🎲 **Entre Linhas** — cada rodada, o tirador vê a carta secretamente no celular "
