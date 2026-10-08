@@ -1,9 +1,8 @@
 """
 Entre Linhas — Desktop + QR code para o tirador
 Layout em duas colunas:
-- Esquerda (66%): grade protagonista
-- Direita (33%): Time da rodada + Cronômetro compactos
-Vitória detectada automaticamente ao esvaziar o baralho.
+- Esquerda (66%): grade protagonista com auto-scale
+- Direita (33%): Time (A) + Cronômetro (B) + Cartas faltantes (C)
 """
 
 import io
@@ -112,7 +111,7 @@ PALAVRAS = [
 
 
 # =====================================================
-# FIREBASE — API REST
+# FIREBASE
 # =====================================================
 def fb_url(sala_id, path=""):
     base = FIREBASE_URL.rstrip("/")
@@ -151,7 +150,7 @@ def fb_delete(sala_id):
 
 
 # =====================================================
-# FUNÇÕES UTILITÁRIAS
+# UTILITÁRIOS
 # =====================================================
 def gerar_sala_id():
     chars = string.ascii_uppercase + string.digits
@@ -193,7 +192,6 @@ def detectar_vencedor(estados, nome_t1, nome_t2):
     p1 = sum(1 for v in estados.values() if v == 1)
     p2 = sum(1 for v in estados.values() if v == 2)
     desc = sum(1 for v in estados.values() if v == 3)
-
     if p1 == 0 and p2 == 0:
         return "sem_dados", p1, p2, desc, "#64748b"
     if p1 > p2:
@@ -227,16 +225,12 @@ def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
 
     st.markdown(
         f"""
-        <div style="
-            padding: 32px 24px;
-            background: linear-gradient(135deg, {cor}18, {cor}08);
-            border: 4px solid {cor};
-            border-radius: 20px;
-            text-align: center;
-            font-family: system-ui;
-            margin: 16px 0 24px 0;
-            box-shadow: 0 8px 32px {cor}30;
-        ">
+        <div style="padding: 32px 24px;
+                    background: linear-gradient(135deg, {cor}18, {cor}08);
+                    border: 4px solid {cor}; border-radius: 20px;
+                    text-align: center; font-family: system-ui;
+                    margin: 16px 0 24px 0;
+                    box-shadow: 0 8px 32px {cor}30;">
             <div style="font-size: 64px; line-height: 1; margin-bottom: 8px;">
                 {emoji}
             </div>
@@ -322,46 +316,19 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
     html = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; font-family: system-ui, sans-serif; }}
-        .timer-wrap {{
-            padding: 20px 20px;
-            border-radius: 16px;
-            background: #22c55e15;
-            border: 4px solid #22c55e;
-            text-align: center;
-            transition: background 0.3s, border-color 0.3s;
-        }}
-        .timer-tempo {{
-            font-size: 110px;
-            font-weight: 900;
-            font-variant-numeric: tabular-nums;
-            line-height: 1;
-            margin-bottom: 8px;
-            color: #22c55e;
-            transition: color 0.3s;
-            letter-spacing: 3px;
-            text-shadow: 0 3px 14px rgba(0,0,0,0.06);
-        }}
-        .timer-label {{
-            font-size: 13px;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-top: 6px;
-        }}
-        .timer-bar {{
-            width: 100%;
-            height: 14px;
-            background: #e2e8f0;
-            border-radius: 7px;
-            overflow: hidden;
-            margin-top: 16px;
-        }}
-        .timer-fill {{
-            height: 100%;
-            width: 100%;
-            background: #22c55e;
-            transition: width 1s linear, background 0.3s;
-        }}
+        .timer-wrap {{ padding: 20px 20px; border-radius: 16px;
+            background: #22c55e15; border: 4px solid #22c55e;
+            text-align: center; transition: background 0.3s, border-color 0.3s; }}
+        .timer-tempo {{ font-size: 110px; font-weight: 900;
+            font-variant-numeric: tabular-nums; line-height: 1;
+            margin-bottom: 8px; color: #22c55e; transition: color 0.3s;
+            letter-spacing: 3px; text-shadow: 0 3px 14px rgba(0,0,0,0.06); }}
+        .timer-label {{ font-size: 13px; color: #64748b;
+            text-transform: uppercase; letter-spacing: 2px; margin-top: 6px; }}
+        .timer-bar {{ width: 100%; height: 14px; background: #e2e8f0;
+            border-radius: 7px; overflow: hidden; margin-top: 16px; }}
+        .timer-fill {{ height: 100%; width: 100%; background: #22c55e;
+            transition: width 1s linear, background 0.3s; }}
     </style></head><body>
         <div class="timer-wrap" id="wrap">
             <div class="timer-tempo" id="tempo">--:--</div>
@@ -446,16 +413,41 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
 
 
 # =====================================================
-# GRID (somente leitura)
+# GRID COM AUTO-SCALE (transform: scale via JS)
 # =====================================================
 def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     tam = len(linhas)
+
+    # Tamanhos NATURAIS grandes — a escala é aplicada em JS
+    tamanhos = {
+        3: {"cell": 230, "coord": 65, "min_h": 100,
+            "f_letter": 30, "f_word": 24, "f_coord": 48},
+        4: {"cell": 200, "coord": 60, "min_h": 90,
+            "f_letter": 28, "f_word": 22, "f_coord": 42},
+        5: {"cell": 180, "coord": 55, "min_h": 82,
+            "f_letter": 26, "f_word": 20, "f_coord": 38},
+        6: {"cell": 160, "coord": 50, "min_h": 74,
+            "f_letter": 24, "f_word": 18, "f_coord": 34},
+    }
+    sz = tamanhos.get(tam, tamanhos[5])
+    cell = sz["cell"]
+    coord_w = sz["coord"]
+    min_h = sz["min_h"]
+    f_letter = sz["f_letter"]
+    f_word = sz["f_word"]
+    f_coord = sz["f_coord"]
+
+    # Cabeçalho 1: letras
     header1 = '<div></div><div></div>'
     for j in range(1, tam + 1):
         header1 += f'<div class="cel cel-coord">{chr(64 + j)}</div>'
+
+    # Cabeçalho 2: canto + palavras-coluna
     header2 = '<div></div><div class="cel cel-canto">×</div>'
     for col in colunas:
         header2 += f'<div class="cel cel-col">{col}</div>'
+
+    # Linhas com cartas
     rows = ""
     for i, lin in enumerate(linhas, 1):
         rows += f'<div class="cel cel-coord">{i}</div>'
@@ -465,6 +457,7 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
             estado = estados.get(coord, 0)
             rows += f'<div class="cel cel-carta state-{estado}">{coord}</div>'
 
+    # Placar
     p1 = sum(1 for v in estados.values() if v == 1)
     p2 = sum(1 for v in estados.values() if v == 2)
     desc = sum(1 for v in estados.values() if v == 3)
@@ -472,56 +465,173 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     html = f"""
 <!DOCTYPE html><html><head><style>
     body {{ margin: 0; font-family: system-ui, sans-serif; }}
-    .placar {{ display: flex; gap: 24px; align-items: center;
-        padding: 12px 16px; background: #f8fafc; border: 2px solid #cbd5e1;
-        border-radius: 10px; margin-bottom: 14px; font-size: 16px;
-        font-weight: 600; flex-wrap: wrap; }}
+
+    /* ---- PLACAR ---- */
+    .placar {{
+        display: flex; gap: 24px; align-items: center;
+        padding: 12px 16px; background: #f8fafc;
+        border: 2px solid #cbd5e1; border-radius: 10px;
+        margin-bottom: 14px; font-size: 16px;
+        font-weight: 600; flex-wrap: wrap;
+    }}
     .placar-time {{ display: flex; align-items: center; gap: 8px; }}
-    .placar-dot {{ width: 22px; height: 22px; border-radius: 4px;
-        border: 2px solid #4a5568; flex-shrink: 0; }}
-    .dot-b {{ background: #1e3c78; }} .dot-r {{ background: #dc2626; }}
+    .placar-dot {{
+        width: 22px; height: 22px; border-radius: 4px;
+        border: 2px solid #4a5568; flex-shrink: 0;
+    }}
+    .dot-b {{ background: #1e3c78; }}
+    .dot-r {{ background: #dc2626; }}
     .dot-x {{ background: #94a3b8; }}
-    .placar-nome {{ font-size: 15px; max-width: 180px; overflow: hidden;
-        text-overflow: ellipsis; white-space: nowrap; }}
-    .placar-num {{ font-size: 26px; min-width: 34px; text-align: center; font-weight: bold; }}
-    .placar-num.blue {{ color: #1e3c78; }} .placar-num.red {{ color: #dc2626; }}
+    .placar-nome {{
+        font-size: 15px; max-width: 180px;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }}
+    .placar-num {{
+        font-size: 26px; min-width: 34px;
+        text-align: center; font-weight: bold;
+    }}
+    .placar-num.blue {{ color: #1e3c78; }}
+    .placar-num.red {{ color: #dc2626; }}
     .placar-num.grey {{ color: #64748b; }}
-    .grid-el {{ display: grid;
-        grid-template-columns: 60px 170px repeat({tam}, 170px); gap: 6px; }}
-    .cel {{ border: 3px solid #4a5568; padding: 16px 10px; text-align: center;
-        display: flex; align-items: center; justify-content: center;
-        min-height: 70px; font-size: 16px; border-radius: 6px; user-select: none; }}
-    .cel-coord {{ background: #f0f0f0; font-weight: bold; font-size: 22px; color: #323232; }}
-    .cel-canto {{ background: #e6e6e6; font-weight: bold; font-size: 26px; }}
-    .cel-col {{ background: #c5e0b4; font-weight: bold; font-size: 18px; }}
-    .cel-lin {{ background: #ffe699; font-weight: bold; font-size: 18px; }}
-    .cel-carta {{ font-weight: 900; font-size: 34px; min-height: 70px;
-        transition: background 0.3s, color 0.3s; letter-spacing: 1px; }}
+
+    /* ---- GRID COM AUTO-SCALE ---- */
+    .grid-wrap {{
+        width: 100%;
+        overflow: hidden;
+        position: relative;
+    }}
+    .grid-el {{
+        display: grid;
+        grid-template-columns:
+            {coord_w}px
+            {cell}px
+            repeat({tam}, {cell}px);
+        gap: 6px;
+        width: fit-content;
+        transform-origin: top left;
+        transition: transform 0.15s ease-out;
+    }}
+    .cel {{
+        border: 3px solid #4a5568;
+        padding: 10px 6px;
+        text-align: center;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: {min_h}px;
+        font-size: {f_word}px;
+        border-radius: 6px;
+        user-select: none;
+        overflow: hidden;
+        word-break: break-word;
+        line-height: 1.15;
+    }}
+    .cel-coord {{
+        background: #f0f0f0;
+        font-weight: bold;
+        font-size: {f_letter}px;
+        color: #323232;
+    }}
+    .cel-canto {{
+        background: #e6e6e6;
+        font-weight: bold;
+        font-size: {f_letter + 2}px;
+    }}
+    .cel-col {{
+        background: #c5e0b4;
+        font-weight: bold;
+        font-size: {f_word}px;
+    }}
+    .cel-lin {{
+        background: #ffe699;
+        font-weight: bold;
+        font-size: {f_word}px;
+    }}
+    .cel-carta {{
+        font-weight: 900;
+        font-size: {f_coord}px;
+        min-height: {min_h}px;
+        transition: background 0.3s, color 0.3s;
+        letter-spacing: 0.5px;
+    }}
     .cel-carta.state-0 {{ background: #d9e1f2; color: #1e3c78; }}
     .cel-carta.state-1 {{ background: #1e3c78; color: #ffffff; }}
     .cel-carta.state-2 {{ background: #dc2626; color: #ffffff; }}
-    .cel-carta.state-3 {{ background: #cbd5e1; color: #64748b;
-        text-decoration: line-through; opacity: 0.7; }}
+    .cel-carta.state-3 {{
+        background: #cbd5e1; color: #64748b;
+        text-decoration: line-through; opacity: 0.7;
+    }}
 </style></head><body>
+
 <div class="placar">
-    <div class="placar-time"><span class="placar-dot dot-b"></span>
+    <div class="placar-time">
+        <span class="placar-dot dot-b"></span>
         <span class="placar-nome">{nome_time_1}</span>
-        <span class="placar-num blue">{p1}</span></div>
-    <div class="placar-time"><span class="placar-dot dot-r"></span>
+        <span class="placar-num blue">{p1}</span>
+    </div>
+    <div class="placar-time">
+        <span class="placar-dot dot-r"></span>
         <span class="placar-nome">{nome_time_2}</span>
-        <span class="placar-num red">{p2}</span></div>
-    <div class="placar-time"><span class="placar-dot dot-x"></span>
+        <span class="placar-num red">{p2}</span>
+    </div>
+    <div class="placar-time">
+        <span class="placar-dot dot-x"></span>
         <span class="placar-nome">Descartadas</span>
-        <span class="placar-num grey">{desc}</span></div>
+        <span class="placar-num grey">{desc}</span>
+    </div>
 </div>
-<div class="grid-el">{header1}{header2}{rows}</div>
+
+<div class="grid-wrap" id="grid-wrap">
+    <div class="grid-el" id="grid-el">
+        {header1}
+        {header2}
+        {rows}
+    </div>
+</div>
+
+<script>
+(function() {{
+    function autoScale() {{
+        const wrap = document.getElementById('grid-wrap');
+        const grid = document.getElementById('grid-el');
+        if (!wrap || !grid) return;
+
+        // Reseta para medir tamanho natural
+        grid.style.transform = 'scale(1)';
+        wrap.style.height = 'auto';
+
+        const naturalWidth = grid.offsetWidth;
+        const naturalHeight = grid.offsetHeight;
+        const containerWidth = wrap.clientWidth;
+
+        let scale = 1;
+        if (naturalWidth > containerWidth && containerWidth > 0) {{
+            scale = containerWidth / naturalWidth;
+        }}
+
+        grid.style.transform = 'scale(' + scale + ')';
+        wrap.style.height = (naturalHeight * scale) + 'px';
+    }}
+
+    // Roda várias vezes para garantir (iframe, resize, fontes carregadas)
+    autoScale();
+    setTimeout(autoScale, 30);
+    setTimeout(autoScale, 100);
+    setTimeout(autoScale, 300);
+    setTimeout(autoScale, 800);
+    window.addEventListener('resize', autoScale);
+}})();
+</script>
+
 </body></html>
 """
-    components.html(html, height=int(210 + tam * 120), scrolling=False)
+    # Altura máxima esperada (sem escala) — se escalar, sobra um pouco de espaço
+    altura = int(240 + tam * (min_h + 8))
+    components.html(html, height=altura, scrolling=False)
 
 
 # =====================================================
-# INTERFACE MOBILE (celular do tirador)
+# INTERFACE MOBILE
 # =====================================================
 def render_mobile(sala_id):
     st.markdown("""
@@ -532,7 +642,7 @@ def render_mobile(sala_id):
     """, unsafe_allow_html=True)
 
     if not FIREBASE_URL:
-        st.error("⚠️ Firebase não configurado. Peça ao operador do jogo.")
+        st.error("⚠️ Firebase não configurado.")
         return
 
     st_autorefresh(interval=1500, key="mobile_poll")
@@ -631,7 +741,6 @@ def render_mobile(sala_id):
             restante_seg = max(0, int(tempo_total_seg - decorrido_ms / 1000))
             mm = restante_seg // 60
             ss = restante_seg % 60
-
             if restante_seg == 0:
                 cor, icone, texto_estado = "#dc2626", "⏰", "Tempo esgotado"
             elif restante_seg <= tempo_total_seg * 0.2:
@@ -640,7 +749,6 @@ def render_mobile(sala_id):
                 cor, icone, texto_estado = "#eab308", "🟡", "Correndo"
             else:
                 cor, icone, texto_estado = "#22c55e", "🟢", "Correndo"
-
             st.markdown(
                 f"""
                 <div style="padding:14px 18px; background:{cor}15;
@@ -664,17 +772,14 @@ def render_mobile(sala_id):
 
     st.markdown("---")
     col_ok, col_err = st.columns(2)
-
     with col_ok:
         if st.button("✅ Acertou", type="primary", use_container_width=True):
             fb_patch(sala_id, {"evento": "acertou"})
             st.rerun()
-
     with col_err:
         if st.button("❌ Errou", use_container_width=True):
             fb_patch(sala_id, {"evento": "errou"})
             st.rerun()
-
     st.caption("Clique assim que o time der a resposta.")
 
 
@@ -698,9 +803,6 @@ for k, v in defaults.items():
         st.session_state[k] = v
 
 
-# =====================================================
-# ROTEADOR: mobile ou desktop?
-# =====================================================
 qp = st.query_params
 sala_qp = qp.get("sala")
 role_qp = qp.get("role")
@@ -711,9 +813,6 @@ if role_qp == "tirador" and sala_qp:
     st.stop()
 
 
-# =====================================================
-# MODO DESKTOP
-# =====================================================
 st.title("🎲 Entre Linhas — Jogo Principal")
 st.caption("Biblioteca com **343 palavras**. Sorteie a grade, exiba o QR code e jogue com 2 times.")
 
@@ -723,7 +822,6 @@ st.caption("Biblioteca com **343 palavras**. Sorteie a grade, exiba o QR code e 
 # =====================================================
 with st.sidebar:
     st.header("⚙️ Configurações")
-
     tamanho = st.select_slider("Tamanho da grade", options=[3, 4, 5, 6], value=5)
     st.caption(f"Precisa de **{tamanho * 2} palavras** sorteadas.")
 
@@ -784,24 +882,17 @@ with st.sidebar:
         url_mobile = f"{APP_URL}?sala={st.session_state.sala_id}&role=tirador"
         st.image(gerar_qr_code(url_mobile), use_column_width=True)
         st.caption(f"Sala: **{st.session_state.sala_id}**")
-        st.caption(
-            "O tirador escaneia uma vez com o celular. "
-            "A tela dele mostrará a coordenada secreta + botões."
-        )
+        st.caption("O tirador escaneia uma vez com o celular.")
 
 
 # =====================================================
-# LÓGICA DE SORTEIO DA GRADE
+# SORTEIO
 # =====================================================
 if sortear_btn:
     if len(palavras_usuario) < tamanho * 2:
         st.error(f"❌ Você tem apenas **{len(palavras_usuario)} palavras**.")
     elif not FIREBASE_URL:
-        st.error(
-            "⚠️ Configure o **FIREBASE_URL** em Secrets antes de iniciar.\n\n"
-            "**Localmente:** crie `.streamlit/secrets.toml`\n\n"
-            "**Streamlit Cloud:** Settings → Secrets"
-        )
+        st.error("⚠️ Configure o **FIREBASE_URL** em Secrets antes de iniciar.")
     else:
         linhas, colunas = sortear(palavras_usuario, tamanho)
         sala_id = gerar_sala_id()
@@ -840,7 +931,6 @@ if sortear_btn:
             "tempo_total": tempo_total_seg,
             "timer_iniciado_em": None,
         })
-
         st.success(f"✅ Grade **{tamanho}×{tamanho}** pronta! Sala **{sala_id}**.")
 
 
@@ -862,7 +952,6 @@ sala_id = st.session_state.sala_id
 total_cartas = tam * tam
 nome_turno = nome_t1 if time_atual == 1 else nome_t2
 cor_turno = "#1e3c78" if time_atual == 1 else "#dc2626"
-
 jogo_acabou = (len(deck) == 0 and carta_atual is None)
 
 
@@ -922,16 +1011,15 @@ if sala_id and fase == "decidindo":
 
 
 # =====================================================
-# LAYOUT PRINCIPAL — DUAS COLUNAS
+# LAYOUT PRINCIPAL
 # =====================================================
 col_esq, col_dir = st.columns([2, 1], gap="large")
 
 
 # =====================================================
-# COLUNA ESQUERDA — GRADE + AÇÕES
+# COLUNA ESQUERDA — GRADE
 # =====================================================
 with col_esq:
-
     if jogo_acabou:
         vencedor, p1, p2, desc, cor_v = detectar_vencedor(estados, nome_t1, nome_t2)
         render_banner_vitoria(vencedor, p1, p2, desc, cor_v, nome_t1, nome_t2)
@@ -944,22 +1032,12 @@ with col_esq:
 
     render_grid_estados(linhas, colunas, estados, nome_t1, nome_t2)
 
-    st.write("")
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Restantes", len(deck))
-    c2.metric("Sorteadas", len(st.session_state.sorteadas))
-    c3.metric("Total", total_cartas)
-
-    if total_cartas > 0:
-        st.progress(len(st.session_state.sorteadas) / total_cartas)
-
     st.divider()
 
     if jogo_acabou:
         col_n1, col_n2 = st.columns(2)
         with col_n1:
-            if st.button("🔄 Nova partida (mesma sala)",
+            if st.button("🔄 Nova partida (mesma grade)",
                          type="primary", use_container_width=True):
                 coords = gerar_coordenadas(tam)
                 st.session_state.deck = coords
@@ -987,10 +1065,8 @@ with col_esq:
                 st.rerun()
 
     elif fase == "aguardando":
-        st.caption(
-            "👉 O tirador pega o celular e escaneia o QR code **na barra lateral**. "
-            "Depois clique abaixo para sortear a carta."
-        )
+        st.caption("👉 O tirador escaneia o QR code na barra lateral. "
+                   "Depois clique abaixo para sortear a carta.")
         if st.button("🎴 Sortear carta secreta", type="primary", use_container_width=True):
             if not deck:
                 st.warning("Baralho vazio!")
@@ -1012,7 +1088,7 @@ with col_esq:
 
     elif fase == "decidindo":
         st.info("⏳ **Carta em jogo** — aguardando o tirador responder no celular…")
-        st.caption("🔄 A tela atualiza automaticamente a cada 1.5s.")
+        st.caption("🔄 Atualizando automaticamente a cada 1.5s.")
         with st.expander("🆘 Emergência: usar botões do desktop"):
             col_a, col_b = st.columns(2)
             with col_a:
@@ -1035,7 +1111,7 @@ with col_esq:
 
 
 # =====================================================
-# COLUNA DIREITA — QUADRANTES A (TIME) E B (TIMER)
+# COLUNA DIREITA — QUADRANTES A, B e C
 # =====================================================
 with col_dir:
 
@@ -1057,16 +1133,10 @@ with col_dir:
 
         st.markdown(
             f"""
-            <div style="
-                padding:24px 20px;
-                background:{cor_a}15;
-                border:4px solid {cor_a};
-                border-radius:16px;
-                text-align:center;
-                font-family:system-ui;
-                margin-bottom:16px;
-                box-shadow: 0 3px 12px {cor_a}22;
-            ">
+            <div style="padding:24px 20px; background:{cor_a}15;
+                        border:4px solid {cor_a}; border-radius:16px;
+                        text-align:center; font-family:system-ui;
+                        margin-bottom:16px; box-shadow: 0 3px 12px {cor_a}22;">
                 <div style="font-size:13px;color:#64748b;
                             text-transform:uppercase;letter-spacing:3px;
                             font-weight:bold;">
@@ -1085,16 +1155,10 @@ with col_dir:
     else:
         st.markdown(
             f"""
-            <div style="
-                padding:24px 20px;
-                background:{cor_turno}15;
-                border:4px solid {cor_turno};
-                border-radius:16px;
-                text-align:center;
-                font-family:system-ui;
-                margin-bottom:16px;
-                box-shadow: 0 3px 12px {cor_turno}22;
-            ">
+            <div style="padding:24px 20px; background:{cor_turno}15;
+                        border:4px solid {cor_turno}; border-radius:16px;
+                        text-align:center; font-family:system-ui;
+                        margin-bottom:16px; box-shadow: 0 3px 12px {cor_turno}22;">
                 <div style="font-size:13px;color:#64748b;
                             text-transform:uppercase;letter-spacing:3px;
                             font-weight:bold;">
@@ -1114,15 +1178,9 @@ with col_dir:
     # ---------- QUADRANTE B: TIMER ----------
     st.markdown(
         """
-        <div style="
-            font-size:14px;
-            color:#64748b;
-            text-transform:uppercase;
-            letter-spacing:3px;
-            text-align:center;
-            margin-bottom:10px;
-            font-weight:bold;
-        ">
+        <div style="font-size:14px; color:#64748b;
+                    text-transform:uppercase; letter-spacing:3px;
+                    text-align:center; margin-bottom:10px; font-weight:bold;">
             ⏱️ Cronômetro
         </div>
         """,
@@ -1130,10 +1188,9 @@ with col_dir:
     )
 
     if jogo_acabou:
-        st.info("🏁 Jogo encerrado. Inicie uma nova partida ou sorteie uma nova grade.")
+        st.info("🏁 Jogo encerrado.")
     elif st.session_state.timer_ativo:
         tempo_total = st.session_state.timer_minutos * 60 + st.session_state.timer_segundos
-
         if tempo_total > 0:
             rodando = st.session_state.timer_rodando
             pausado_seg = st.session_state.tempo_pausado_segundos
@@ -1154,45 +1211,24 @@ with col_dir:
                     cor = "#eab308"
                 else:
                     cor = "#dc2626"
-
                 st.markdown(
                     f"""
-                    <div style="
-                        padding:20px 20px;
-                        border-radius:16px;
-                        background:{cor}15;
-                        border:4px solid {cor};
-                        text-align:center;
-                        font-family:system-ui;
-                    ">
-                        <div style="
-                            font-size:100px;
-                            font-weight:900;
-                            color:{cor};
-                            font-variant-numeric:tabular-nums;
-                            line-height:1;
-                            letter-spacing:3px;
-                            text-shadow: 0 3px 14px rgba(0,0,0,0.06);
-                        ">
+                    <div style="padding:20px 20px; border-radius:16px;
+                                background:{cor}15; border:4px solid {cor};
+                                text-align:center; font-family:system-ui;">
+                        <div style="font-size:100px;font-weight:900;color:{cor};
+                                    font-variant-numeric:tabular-nums;line-height:1;
+                                    letter-spacing:3px;
+                                    text-shadow: 0 3px 14px rgba(0,0,0,0.06);">
                             {restante_exibir // 60:02d}:{restante_exibir % 60:02d}
                         </div>
-                        <div style="
-                            font-size:13px;
-                            color:#64748b;
-                            text-transform:uppercase;
-                            letter-spacing:2px;
-                            margin-top:8px;
-                        ">
+                        <div style="font-size:13px;color:#64748b;
+                                    text-transform:uppercase;letter-spacing:2px;
+                                    margin-top:8px;">
                             {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}
                         </div>
-                        <div style="
-                            width:100%;
-                            height:14px;
-                            background:#e2e8f0;
-                            border-radius:7px;
-                            overflow:hidden;
-                            margin-top:16px;
-                        ">
+                        <div style="width:100%;height:14px;background:#e2e8f0;
+                                    border-radius:7px;overflow:hidden;margin-top:16px;">
                             <div style="width:{pct}%;height:100%;background:{cor};"></div>
                         </div>
                     </div>
@@ -1201,9 +1237,7 @@ with col_dir:
                 )
 
             st.write("")
-
             c_play, c_reset = st.columns(2)
-
             with c_play:
                 if not rodando:
                     label = "▶️ Iniciar" if pausado_seg is None else "▶️ Retomar"
@@ -1230,7 +1264,6 @@ with col_dir:
                         st.session_state.tempo_pausado_segundos = restante
                         st.session_state.timer_rodando = False
                         st.rerun()
-
             with c_reset:
                 if st.button("🔄 Reiniciar", use_container_width=True, key="timer_reset"):
                     st.session_state.turno_iniciado_em = _agora_ms()
@@ -1265,7 +1298,71 @@ with col_dir:
         else:
             st.info("Configure minutos ou segundos na barra lateral.")
     else:
-        st.info("⏱️ Cronômetro desativado. Ative na barra lateral para usar.")
+        st.info("⏱️ Cronômetro desativado.")
+
+    # ---------- QUADRANTE C: CARTAS FALTANTES ----------
+    st.markdown(
+        """
+        <div style="font-size:14px; color:#64748b;
+                    text-transform:uppercase; letter-spacing:3px;
+                    text-align:center; margin-top:24px; margin-bottom:10px;
+                    font-weight:bold;">
+            📊 Cartas Faltantes
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    faltantes = len(deck)
+    pct_restante = (faltantes / total_cartas) * 100 if total_cartas > 0 else 0
+
+    if faltantes == 0:
+        cor_f = "#22c55e"
+        icone_f = "🏁"
+        label_f = "Baralho vazio"
+    elif pct_restante > 50:
+        cor_f = "#22c55e"
+        icone_f = "🟢"
+        label_f = "Ainda tem muito jogo"
+    elif pct_restante > 20:
+        cor_f = "#eab308"
+        icone_f = "🟡"
+        label_f = "Reta final chegando"
+    else:
+        cor_f = "#dc2626"
+        icone_f = "🔴"
+        label_f = "Últimas cartas!"
+
+    sorteadas_qtd = len(st.session_state.sorteadas)
+
+    st.markdown(
+        f"""
+        <div style="padding:24px 20px; border-radius:16px;
+                    background:{cor_f}15; border:4px solid {cor_f};
+                    text-align:center; font-family:system-ui;
+                    box-shadow: 0 3px 12px {cor_f}22;">
+            <div style="font-size:90px; font-weight:900; color:{cor_f};
+                        line-height:1; font-variant-numeric:tabular-nums;
+                        letter-spacing:2px;
+                        text-shadow: 0 3px 14px {cor_f}22;">
+                {faltantes}
+            </div>
+            <div style="font-size:13px; color:#64748b;
+                        text-transform:uppercase; letter-spacing:2px;
+                        margin-top:8px; font-weight:bold;">
+                {icone_f} cartas no baralho
+            </div>
+            <div style="width:100%; height:14px; background:#e2e8f0;
+                        border-radius:7px; overflow:hidden; margin-top:16px;">
+                <div style="width:{pct_restante}%; height:100%; background:{cor_f};"></div>
+            </div>
+            <div style="font-size:12px; color:#94a3b8; margin-top:10px;">
+                {sorteadas_qtd} de {total_cartas} já sorteadas — {label_f}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # =====================================================
