@@ -1,8 +1,9 @@
 """
 Entre Linhas — Desktop + QR code para o tirador
-- Dispositivo principal: grade + controle de rodadas + timer
-- Celular do tirador: coordenada secreta + Acertou/Errou + iniciar cronômetro
-- Comunicação via Firebase Realtime Database
+Layout em duas colunas:
+- Esquerda (66%): grade protagonista
+- Direita (33%): Time da rodada + Cronômetro compactos
+Vitória detectada automaticamente ao esvaziar o baralho.
 """
 
 import io
@@ -33,7 +34,22 @@ st.set_page_config(
 
 
 # =====================================================
-# SECRETS — leitura tolerante a erros
+# CSS GLOBAL — ajustes para TV
+# =====================================================
+st.markdown("""
+<style>
+    [data-testid="column"] { padding: 0 12px; }
+    [data-testid="stMetricValue"] { font-size: 26px !important; }
+    [data-testid="stMetricLabel"] { font-size: 13px !important; }
+    h1 { font-size: 26px !important; margin-bottom: 4px !important; }
+    h2 { font-size: 22px !important; }
+    .stButton > button { font-size: 15px !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
+# =====================================================
+# SECRETS
 # =====================================================
 def _get_secret(key, default=""):
     try:
@@ -171,7 +187,133 @@ def gerar_qr_code(url):
 
 
 # =====================================================
-# TIMER VISUAL (componente JS)
+# DETECÇÃO DE VITÓRIA
+# =====================================================
+def detectar_vencedor(estados, nome_t1, nome_t2):
+    p1 = sum(1 for v in estados.values() if v == 1)
+    p2 = sum(1 for v in estados.values() if v == 2)
+    desc = sum(1 for v in estados.values() if v == 3)
+
+    if p1 == 0 and p2 == 0:
+        return "sem_dados", p1, p2, desc, "#64748b"
+    if p1 > p2:
+        return "t1", p1, p2, desc, "#1e3c78"
+    if p2 > p1:
+        return "t2", p1, p2, desc, "#dc2626"
+    return "empate", p1, p2, desc, "#eab308"
+
+
+def render_banner_vitoria(vencedor, p1, p2, desc, cor, nome_t1, nome_t2):
+    total_computado = p1 + p2
+    pct1 = (p1 / total_computado * 100) if total_computado > 0 else 0
+    pct2 = (p2 / total_computado * 100) if total_computado > 0 else 0
+
+    if vencedor == "t1":
+        titulo = f"🏆 {nome_t1} VENCEU!"
+        subtitulo = f"{p1} × {p2} cartas conquistadas"
+        emoji = "🔵"
+    elif vencedor == "t2":
+        titulo = f"🏆 {nome_t2} VENCEU!"
+        subtitulo = f"{p2} × {p1} cartas conquistadas"
+        emoji = "🔴"
+    elif vencedor == "empate":
+        titulo = "🤝 EMPATE!"
+        subtitulo = f"{p1} × {p2} cartas conquistadas"
+        emoji = "⚪"
+    else:
+        titulo = "🏁 FIM DE JOGO"
+        subtitulo = "Nenhuma carta foi conquistada"
+        emoji = "🎲"
+
+    st.markdown(
+        f"""
+        <div style="
+            padding: 32px 24px;
+            background: linear-gradient(135deg, {cor}18, {cor}08);
+            border: 4px solid {cor};
+            border-radius: 20px;
+            text-align: center;
+            font-family: system-ui;
+            margin: 16px 0 24px 0;
+            box-shadow: 0 8px 32px {cor}30;
+        ">
+            <div style="font-size: 64px; line-height: 1; margin-bottom: 8px;">
+                {emoji}
+            </div>
+            <div style="font-size: 38px; font-weight: bold;
+                        color: {cor}; letter-spacing: 1px; line-height: 1.1;">
+                {titulo}
+            </div>
+            <div style="font-size: 20px; color: #64748b;
+                        margin-top: 12px; font-weight: 500;">
+                {subtitulo}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_e, col_d = st.columns(2)
+    with col_e:
+        st.markdown(
+            f"""
+            <div style="padding: 16px;
+                        background: {('#1e3c78' if vencedor == 't1' else '#f8fafc')};
+                        border: 2px solid #1e3c78; border-radius: 12px;
+                        text-align: center; font-family: system-ui;">
+                <div style="font-size: 13px;
+                            color: {('#ffffff' if vencedor == 't1' else '#64748b')};
+                            text-transform: uppercase; letter-spacing: 1.5px;">
+                    🔵 {nome_t1}
+                </div>
+                <div style="font-size: 42px; font-weight: bold;
+                            color: {('#ffffff' if vencedor == 't1' else '#1e3c78')};
+                            margin-top: 4px;">
+                    {p1}
+                </div>
+                <div style="font-size: 12px;
+                            color: {('#e0e7ff' if vencedor == 't1' else '#94a3b8')};
+                            margin-top: 4px;">
+                    {pct1:.0f}% das cartas
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_d:
+        st.markdown(
+            f"""
+            <div style="padding: 16px;
+                        background: {('#dc2626' if vencedor == 't2' else '#f8fafc')};
+                        border: 2px solid #dc2626; border-radius: 12px;
+                        text-align: center; font-family: system-ui;">
+                <div style="font-size: 13px;
+                            color: {('#ffffff' if vencedor == 't2' else '#64748b')};
+                            text-transform: uppercase; letter-spacing: 1.5px;">
+                    🔴 {nome_t2}
+                </div>
+                <div style="font-size: 42px; font-weight: bold;
+                            color: {('#ffffff' if vencedor == 't2' else '#dc2626')};
+                            margin-top: 4px;">
+                    {p2}
+                </div>
+                <div style="font-size: 12px;
+                            color: {('#fee2e2' if vencedor == 't2' else '#94a3b8')};
+                            margin-top: 4px;">
+                    {pct2:.0f}% das cartas
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.write("")
+    st.caption(f"Total: **{total_computado + desc}** cartas — Descartadas: **{desc}**")
+
+
+# =====================================================
+# TIMER VISUAL
 # =====================================================
 def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
     if tempo_total <= 0:
@@ -180,18 +322,46 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
     html = f"""
     <!DOCTYPE html><html><head><style>
         body {{ margin: 0; font-family: system-ui, sans-serif; }}
-        .timer-wrap {{ padding: 16px 20px; border-radius: 12px;
-            background: #22c55e15; border: 2px solid #22c55e;
-            text-align: center; transition: background 0.3s, border-color 0.3s; }}
-        .timer-tempo {{ font-size: 56px; font-weight: bold;
-            font-variant-numeric: tabular-nums; line-height: 1;
-            margin-bottom: 6px; color: #22c55e; transition: color 0.3s; }}
-        .timer-label {{ font-size: 12px; color: #64748b;
-            text-transform: uppercase; letter-spacing: 1.5px; }}
-        .timer-bar {{ width: 100%; height: 10px; background: #e2e8f0;
-            border-radius: 5px; overflow: hidden; margin-top: 14px; }}
-        .timer-fill {{ height: 100%; width: 100%; background: #22c55e;
-            transition: width 1s linear, background 0.3s; }}
+        .timer-wrap {{
+            padding: 20px 20px;
+            border-radius: 16px;
+            background: #22c55e15;
+            border: 4px solid #22c55e;
+            text-align: center;
+            transition: background 0.3s, border-color 0.3s;
+        }}
+        .timer-tempo {{
+            font-size: 110px;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            margin-bottom: 8px;
+            color: #22c55e;
+            transition: color 0.3s;
+            letter-spacing: 3px;
+            text-shadow: 0 3px 14px rgba(0,0,0,0.06);
+        }}
+        .timer-label {{
+            font-size: 13px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 6px;
+        }}
+        .timer-bar {{
+            width: 100%;
+            height: 14px;
+            background: #e2e8f0;
+            border-radius: 7px;
+            overflow: hidden;
+            margin-top: 16px;
+        }}
+        .timer-fill {{
+            height: 100%;
+            width: 100%;
+            background: #22c55e;
+            transition: width 1s linear, background 0.3s;
+        }}
     </style></head><body>
         <div class="timer-wrap" id="wrap">
             <div class="timer-tempo" id="tempo">--:--</div>
@@ -272,7 +442,7 @@ def render_timer(tempo_total, iniciado_em_ms, mudo=False, key="timer"):
         }})();
         </script></body></html>
     """
-    components.html(html, height=190, scrolling=False)
+    components.html(html, height=310, scrolling=False)
 
 
 # =====================================================
@@ -317,16 +487,16 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
     .placar-num.blue {{ color: #1e3c78; }} .placar-num.red {{ color: #dc2626; }}
     .placar-num.grey {{ color: #64748b; }}
     .grid-el {{ display: grid;
-        grid-template-columns: 45px 130px repeat({tam}, 130px); gap: 4px; }}
-    .cel {{ border: 2px solid #4a5568; padding: 12px 8px; text-align: center;
+        grid-template-columns: 60px 170px repeat({tam}, 170px); gap: 6px; }}
+    .cel {{ border: 3px solid #4a5568; padding: 16px 10px; text-align: center;
         display: flex; align-items: center; justify-content: center;
-        min-height: 45px; font-size: 13px; border-radius: 4px; user-select: none; }}
-    .cel-coord {{ background: #f0f0f0; font-weight: bold; font-size: 16px; color: #323232; }}
-    .cel-canto {{ background: #e6e6e6; font-weight: bold; font-size: 20px; }}
-    .cel-col {{ background: #c5e0b4; font-weight: bold; }}
-    .cel-lin {{ background: #ffe699; font-weight: bold; }}
-    .cel-carta {{ font-weight: bold; font-size: 22px; min-height: 55px;
-        transition: background 0.3s, color 0.3s; }}
+        min-height: 70px; font-size: 16px; border-radius: 6px; user-select: none; }}
+    .cel-coord {{ background: #f0f0f0; font-weight: bold; font-size: 22px; color: #323232; }}
+    .cel-canto {{ background: #e6e6e6; font-weight: bold; font-size: 26px; }}
+    .cel-col {{ background: #c5e0b4; font-weight: bold; font-size: 18px; }}
+    .cel-lin {{ background: #ffe699; font-weight: bold; font-size: 18px; }}
+    .cel-carta {{ font-weight: 900; font-size: 34px; min-height: 70px;
+        transition: background 0.3s, color 0.3s; letter-spacing: 1px; }}
     .cel-carta.state-0 {{ background: #d9e1f2; color: #1e3c78; }}
     .cel-carta.state-1 {{ background: #1e3c78; color: #ffffff; }}
     .cel-carta.state-2 {{ background: #dc2626; color: #ffffff; }}
@@ -347,7 +517,7 @@ def render_grid_estados(linhas, colunas, estados, nome_time_1, nome_time_2):
 <div class="grid-el">{header1}{header2}{rows}</div>
 </body></html>
 """
-    components.html(html, height=int(180 + tam * 105), scrolling=False)
+    components.html(html, height=int(210 + tam * 120), scrolling=False)
 
 
 # =====================================================
@@ -362,11 +532,10 @@ def render_mobile(sala_id):
     """, unsafe_allow_html=True)
 
     if not FIREBASE_URL:
-        st.error("⚠️ Firebase não configurado. Peça ao operador do jogo para configurar o FIREBASE_URL.")
+        st.error("⚠️ Firebase não configurado. Peça ao operador do jogo.")
         return
 
     st_autorefresh(interval=1500, key="mobile_poll")
-
     dados = fb_get(sala_id)
 
     if not dados:
@@ -446,7 +615,6 @@ def render_mobile(sala_id):
         unsafe_allow_html=True,
     )
 
-    # ---- Cronômetro (só aparece se o timer estiver ativo) ----
     timer_ativo = dados.get("timer_ativo", False)
     timer_iniciado_em = dados.get("timer_iniciado_em")
     tempo_total_seg = dados.get("tempo_total", 0)
@@ -494,7 +662,6 @@ def render_mobile(sala_id):
             )
             st.caption("🔄 Atualizando a cada 1.5s...")
 
-    # ---- Botões Acertou / Errou ----
     st.markdown("---")
     col_ok, col_err = st.columns(2)
 
@@ -538,14 +705,15 @@ qp = st.query_params
 sala_qp = qp.get("sala")
 role_qp = qp.get("role")
 
-# ---------- MODO MOBILE ----------
 if role_qp == "tirador" and sala_qp:
     st.title("🎴 Controle do Tirador")
     render_mobile(sala_qp.upper())
     st.stop()
 
 
-# ---------- MODO DESKTOP ----------
+# =====================================================
+# MODO DESKTOP
+# =====================================================
 st.title("🎲 Entre Linhas — Jogo Principal")
 st.caption("Biblioteca com **343 palavras**. Sorteie a grade, exiba o QR code e jogue com 2 times.")
 
@@ -588,8 +756,7 @@ with st.sidebar:
             if st.button(icone, use_container_width=True):
                 st.session_state.timer_mudo = not st.session_state.timer_mudo
                 st.rerun()
-
-        st.caption("▶️ Inicie pelo **celular do tirador** ou pelos botões abaixo.")
+        st.caption("▶️ Inicie pelo **celular do tirador** ou pelos botões ao lado.")
 
     st.divider()
     st.subheader("📚 Biblioteca")
@@ -610,6 +777,17 @@ with st.sidebar:
         for k in defaults:
             st.session_state[k] = defaults[k]
         st.rerun()
+
+    if st.session_state.sala_id:
+        st.divider()
+        st.subheader("📱 QR do Tirador")
+        url_mobile = f"{APP_URL}?sala={st.session_state.sala_id}&role=tirador"
+        st.image(gerar_qr_code(url_mobile), use_column_width=True)
+        st.caption(f"Sala: **{st.session_state.sala_id}**")
+        st.caption(
+            "O tirador escaneia uma vez com o celular. "
+            "A tela dele mostrará a coordenada secreta + botões."
+        )
 
 
 # =====================================================
@@ -685,9 +863,11 @@ total_cartas = tam * tam
 nome_turno = nome_t1 if time_atual == 1 else nome_t2
 cor_turno = "#1e3c78" if time_atual == 1 else "#dc2626"
 
+jogo_acabou = (len(deck) == 0 and carta_atual is None)
+
 
 # =====================================================
-# POLLING: verifica decisões do celular e sincroniza timer
+# POLLING
 # =====================================================
 if sala_id and fase == "decidindo":
     st_autorefresh(interval=1500, key="desktop_poll")
@@ -695,7 +875,6 @@ if sala_id and fase == "decidindo":
     evento = dados_fb.get("evento")
     timer_fb = dados_fb.get("timer_iniciado_em")
 
-    # Sincroniza: se o celular iniciou o timer e o desktop ainda não está rodando
     if timer_fb and not st.session_state.timer_rodando and st.session_state.timer_ativo:
         st.session_state.turno_iniciado_em = timer_fb
         st.session_state.tempo_pausado_segundos = None
@@ -743,183 +922,75 @@ if sala_id and fase == "decidindo":
 
 
 # =====================================================
-# QR CODE (para o tirador)
+# LAYOUT PRINCIPAL — DUAS COLUNAS
 # =====================================================
-if sala_id:
-    with st.expander("📱 QR code do tirador (clique para expandir)", expanded=True):
-        col_qr, col_info = st.columns([1, 2])
-
-        with col_qr:
-            url_mobile = f"{APP_URL}?sala={sala_id}&role=tirador"
-            st.image(gerar_qr_code(url_mobile), width=220)
-
-        with col_info:
-            st.markdown(f"### Sala: `{sala_id}`")
-            st.markdown(
-                "**Como usar:**\n"
-                "1. O tirador da rodada escaneia o QR code com o celular.\n"
-                "2. A tela do celular mostrará **apenas a coordenada** e os botões "
-                "**▶️ Iniciar cronômetro**, **✅ Acertou** e **❌ Errou**.\n"
-                "3. Quando o time responder, o tirador clica no botão correspondente.\n"
-                "4. O jogo atualiza automaticamente aqui."
-            )
-            st.caption(f"Link direto: `{url_mobile}`")
+col_esq, col_dir = st.columns([2, 1], gap="large")
 
 
 # =====================================================
-# INDICADORES
+# COLUNA ESQUERDA — GRADE + AÇÕES
 # =====================================================
-col1, col2, col3 = st.columns(3)
-col1.metric("Cartas restantes", len(deck))
-col2.metric("Sorteadas", len(st.session_state.sorteadas))
-col3.metric("Total", total_cartas)
-if total_cartas > 0:
-    st.progress(len(st.session_state.sorteadas) / total_cartas)
+with col_esq:
 
+    if jogo_acabou:
+        vencedor, p1, p2, desc, cor_v = detectar_vencedor(estados, nome_t1, nome_t2)
+        render_banner_vitoria(vencedor, p1, p2, desc, cor_v, nome_t1, nome_t2)
 
-# =====================================================
-# TIMER COM CONTROLE MANUAL
-# =====================================================
-if st.session_state.timer_ativo:
-    tempo_total = st.session_state.timer_minutos * 60 + st.session_state.timer_segundos
-
-    if tempo_total > 0:
-        rodando = st.session_state.timer_rodando
-        pausado_seg = st.session_state.tempo_pausado_segundos
-
-        if pausado_seg is None:
-            restante_exibir = tempo_total
-        else:
-            restante_exibir = pausado_seg
-
-        col_play, col_pause, col_reset, col_status = st.columns([1, 1, 1, 2])
-
-        with col_play:
-            if not rodando:
-                label = "▶️ Iniciar" if pausado_seg is None else "▶️ Retomar"
-                if st.button(label, type="primary", use_container_width=True):
-                    if pausado_seg is None:
-                        st.session_state.turno_iniciado_em = _agora_ms()
-                    else:
-                        segundos_decorridos = tempo_total - pausado_seg
-                        st.session_state.turno_iniciado_em = (
-                            _agora_ms() - (segundos_decorridos * 1000)
-                        )
-                    st.session_state.tempo_pausado_segundos = None
-                    st.session_state.timer_rodando = True
-                    st.session_state.turno_contador += 1
-                    if sala_id:
-                        fb_patch(sala_id, {"timer_iniciado_em": st.session_state.turno_iniciado_em})
-                    st.rerun()
-
-        with col_pause:
-            if rodando:
-                if st.button("⏸️ Pausar", use_container_width=True):
-                    decorrido_ms = _agora_ms() - st.session_state.turno_iniciado_em
-                    restante = max(0, int(tempo_total - decorrido_ms / 1000))
-                    st.session_state.tempo_pausado_segundos = restante
-                    st.session_state.timer_rodando = False
-                    st.rerun()
-
-        with col_reset:
-            if st.button("🔄 Reiniciar", use_container_width=True):
-                st.session_state.turno_iniciado_em = _agora_ms()
-                st.session_state.tempo_pausado_segundos = None
-                st.session_state.timer_rodando = False
-                st.session_state.turno_contador += 1
-                if sala_id:
-                    fb_patch(sala_id, {"timer_iniciado_em": None})
-                st.rerun()
-
-        with col_status:
-            if rodando:
-                st.markdown(
-                    "<div style='padding-top:6px;color:#22c55e;font-weight:bold;'>"
-                    "🟢 Cronômetro rodando</div>",
-                    unsafe_allow_html=True,
-                )
-            elif pausado_seg is not None:
-                st.markdown(
-                    f"<div style='padding-top:6px;color:#eab308;font-weight:bold;'>"
-                    f"⏸️ Pausado em {restante_exibir // 60:02d}:{restante_exibir % 60:02d}</div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(
-                    f"<div style='padding-top:6px;color:#64748b;font-weight:bold;'>"
-                    f"⚪ Aguardando início ({tempo_total // 60:02d}:{tempo_total % 60:02d})</div>",
-                    unsafe_allow_html=True,
-                )
-
-        if rodando:
-            render_timer(
-                tempo_total=tempo_total,
-                iniciado_em_ms=st.session_state.turno_iniciado_em,
-                mudo=st.session_state.timer_mudo,
-                key=f"turno_{st.session_state.turno_contador}",
-            )
-        else:
-            pct = (restante_exibir / tempo_total) * 100 if tempo_total > 0 else 0
-            if pct > 50:
-                cor = "#22c55e"
-            elif pct > 20:
-                cor = "#eab308"
-            else:
-                cor = "#dc2626"
-
-            st.markdown(
-                f"""
-                <div style="padding:16px 20px; border-radius:12px;
-                            background:{cor}15; border:2px solid {cor};
-                            text-align:center; font-family:system-ui;">
-                    <div style="font-size:56px; font-weight:bold; color:{cor};
-                                font-variant-numeric: tabular-nums; line-height:1;
-                                margin-bottom:6px;">
-                        {restante_exibir // 60:02d}:{restante_exibir % 60:02d}
-                    </div>
-                    <div style="font-size:12px; color:#64748b;
-                                text-transform:uppercase; letter-spacing:1.5px;">
-                        {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}
-                    </div>
-                    <div style="width:100%; height:10px; background:#e2e8f0;
-                                border-radius:5px; overflow:hidden; margin-top:14px;">
-                        <div style="width:{pct}%; height:100%; background:{cor};"></div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-
-# =====================================================
-# PAINEL DE RODADA
-# =====================================================
-st.divider()
-
-if not deck and carta_atual is None:
-    st.success(f"🏁 **Fim de jogo!** Todas as {total_cartas} cartas foram sorteadas.")
-    st.balloons()
-else:
     st.markdown(
-        f"""
-        <div style="padding:14px 18px; background:{cor_turno}15;
-                    border-left:6px solid {cor_turno}; border-radius:10px;
-                    font-family:system-ui; margin-bottom:14px;">
-            <div style="font-size:12px;color:#64748b;
-                        text-transform:uppercase;letter-spacing:1.5px;">
-                Rodada do
-            </div>
-            <div style="font-size:24px;font-weight:bold;color:{cor_turno};">
-                {nome_turno}
-            </div>
-        </div>
-        """,
+        f"<h2 style='margin-bottom:8px;'>🎯 Grade {tam}×{tam}</h2>",
         unsafe_allow_html=True,
     )
+    st.caption("🔵 Time 1 · 🔴 Time 2 · ⚪ cinza = descartada")
 
-    if fase == "aguardando":
-        st.caption("👉 O tirador pega o celular e escaneia o QR code acima. "
-                   "Depois clique abaixo para sortear a carta.")
+    render_grid_estados(linhas, colunas, estados, nome_t1, nome_t2)
+
+    st.write("")
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Restantes", len(deck))
+    c2.metric("Sorteadas", len(st.session_state.sorteadas))
+    c3.metric("Total", total_cartas)
+
+    if total_cartas > 0:
+        st.progress(len(st.session_state.sorteadas) / total_cartas)
+
+    st.divider()
+
+    if jogo_acabou:
+        col_n1, col_n2 = st.columns(2)
+        with col_n1:
+            if st.button("🔄 Nova partida (mesma sala)",
+                         type="primary", use_container_width=True):
+                coords = gerar_coordenadas(tam)
+                st.session_state.deck = coords
+                st.session_state.estados = {c: 0 for c in coords}
+                st.session_state.sorteadas = []
+                st.session_state.time_atual = 1
+                st.session_state.carta_atual = None
+                st.session_state.fase = "aguardando"
+                st.session_state.turno_iniciado_em = _agora_ms()
+                st.session_state.turno_contador += 1
+                st.session_state.timer_rodando = False
+                st.session_state.tempo_pausado_segundos = None
+                fb_patch(sala_id, {
+                    "coord": None, "evento": None,
+                    "estado": "aguardando",
+                    "timer_iniciado_em": None,
+                    "time_atual": 1,
+                    "nome_turno": nome_t1,
+                })
+                st.rerun()
+        with col_n2:
+            if st.button("🎲 Nova grade (novo sorteio)",
+                         use_container_width=True):
+                st.session_state.linhas = None
+                st.rerun()
+
+    elif fase == "aguardando":
+        st.caption(
+            "👉 O tirador pega o celular e escaneia o QR code **na barra lateral**. "
+            "Depois clique abaixo para sortear a carta."
+        )
         if st.button("🎴 Sortear carta secreta", type="primary", use_container_width=True):
             if not deck:
                 st.warning("Baralho vazio!")
@@ -940,23 +1011,8 @@ else:
                 st.rerun()
 
     elif fase == "decidindo":
-        st.markdown(
-            f"""
-            <div style="padding:24px; background:#f1f5f9; border-radius:12px;
-                        text-align:center; font-family:system-ui;">
-                <div style="font-size:14px;color:#64748b;">
-                    Carta em jogo — aguardando o tirador responder no celular
-                </div>
-                <div style="font-size:44px;font-weight:bold;color:#94a3b8;
-                            margin-top:12px;">❓</div>
-                <div style="font-size:13px;color:#94a3b8;margin-top:12px;">
-                    🔄 Atualizando automaticamente a cada 1.5s...
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+        st.info("⏳ **Carta em jogo** — aguardando o tirador responder no celular…")
+        st.caption("🔄 A tela atualiza automaticamente a cada 1.5s.")
         with st.expander("🆘 Emergência: usar botões do desktop"):
             col_a, col_b = st.columns(2)
             with col_a:
@@ -968,28 +1024,248 @@ else:
                     fb_patch(sala_id, {"evento": "errou"})
                     st.rerun()
 
+    with st.expander(f"📜 Histórico ({len(st.session_state.sorteadas)} cartas)"):
+        if st.session_state.sorteadas:
+            for idx, c in enumerate(st.session_state.sorteadas, 1):
+                estado = estados.get(c, 0)
+                tag = {1: "🔵 Time 1", 2: "🔴 Time 2", 3: "❌ Descartada"}.get(estado, "?")
+                st.markdown(f"`{idx}.` **{c}** — {tag}")
+        else:
+            st.caption("Nenhuma carta sorteada ainda.")
+
 
 # =====================================================
-# GRADE
+# COLUNA DIREITA — QUADRANTES A (TIME) E B (TIMER)
 # =====================================================
-st.divider()
-st.subheader(f"🎯 Grade {tam}×{tam}")
-st.caption("🔵 Time 1 · 🔴 Time 2 · ⚪ cinza = descartada")
+with col_dir:
 
-render_grid_estados(linhas, colunas, estados, nome_t1, nome_t2)
+    # ---------- QUADRANTE A: TIME ----------
+    if jogo_acabou:
+        vencedor_a, _, _, _, cor_a = detectar_vencedor(estados, nome_t1, nome_t2)
+        if vencedor_a == "t1":
+            label_time = nome_t1
+            emoji_time = "🏆🔵"
+        elif vencedor_a == "t2":
+            label_time = nome_t2
+            emoji_time = "🏆🔴"
+        elif vencedor_a == "empate":
+            label_time = "Empate"
+            emoji_time = "🤝"
+        else:
+            label_time = "—"
+            emoji_time = "🏁"
 
-
-# =====================================================
-# HISTÓRICO
-# =====================================================
-with st.expander(f"📜 Histórico ({len(st.session_state.sorteadas)} cartas)"):
-    if st.session_state.sorteadas:
-        for idx, c in enumerate(st.session_state.sorteadas, 1):
-            estado = estados.get(c, 0)
-            tag = {1: "🔵 Time 1", 2: "🔴 Time 2", 3: "❌ Descartada"}.get(estado, "?")
-            st.markdown(f"`{idx}.` **{c}** — {tag}")
+        st.markdown(
+            f"""
+            <div style="
+                padding:24px 20px;
+                background:{cor_a}15;
+                border:4px solid {cor_a};
+                border-radius:16px;
+                text-align:center;
+                font-family:system-ui;
+                margin-bottom:16px;
+                box-shadow: 0 3px 12px {cor_a}22;
+            ">
+                <div style="font-size:13px;color:#64748b;
+                            text-transform:uppercase;letter-spacing:3px;
+                            font-weight:bold;">
+                    Fim de jogo
+                </div>
+                <div style="font-size:44px;font-weight:900;
+                            color:{cor_a};margin-top:10px;
+                            line-height:1.05;letter-spacing:1px;
+                            text-shadow: 0 3px 14px {cor_a}22;">
+                    {emoji_time} {label_time}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
-        st.caption("Nenhuma carta sorteada ainda.")
+        st.markdown(
+            f"""
+            <div style="
+                padding:24px 20px;
+                background:{cor_turno}15;
+                border:4px solid {cor_turno};
+                border-radius:16px;
+                text-align:center;
+                font-family:system-ui;
+                margin-bottom:16px;
+                box-shadow: 0 3px 12px {cor_turno}22;
+            ">
+                <div style="font-size:13px;color:#64748b;
+                            text-transform:uppercase;letter-spacing:3px;
+                            font-weight:bold;">
+                    Rodada do
+                </div>
+                <div style="font-size:44px;font-weight:900;
+                            color:{cor_turno};margin-top:10px;
+                            line-height:1.05;letter-spacing:1px;
+                            text-shadow: 0 3px 14px {cor_turno}22;">
+                    {nome_turno}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # ---------- QUADRANTE B: TIMER ----------
+    st.markdown(
+        """
+        <div style="
+            font-size:14px;
+            color:#64748b;
+            text-transform:uppercase;
+            letter-spacing:3px;
+            text-align:center;
+            margin-bottom:10px;
+            font-weight:bold;
+        ">
+            ⏱️ Cronômetro
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if jogo_acabou:
+        st.info("🏁 Jogo encerrado. Inicie uma nova partida ou sorteie uma nova grade.")
+    elif st.session_state.timer_ativo:
+        tempo_total = st.session_state.timer_minutos * 60 + st.session_state.timer_segundos
+
+        if tempo_total > 0:
+            rodando = st.session_state.timer_rodando
+            pausado_seg = st.session_state.tempo_pausado_segundos
+            restante_exibir = tempo_total if pausado_seg is None else pausado_seg
+
+            if rodando:
+                render_timer(
+                    tempo_total=tempo_total,
+                    iniciado_em_ms=st.session_state.turno_iniciado_em,
+                    mudo=st.session_state.timer_mudo,
+                    key=f"turno_{st.session_state.turno_contador}",
+                )
+            else:
+                pct = (restante_exibir / tempo_total) * 100 if tempo_total > 0 else 0
+                if pct > 50:
+                    cor = "#22c55e"
+                elif pct > 20:
+                    cor = "#eab308"
+                else:
+                    cor = "#dc2626"
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        padding:20px 20px;
+                        border-radius:16px;
+                        background:{cor}15;
+                        border:4px solid {cor};
+                        text-align:center;
+                        font-family:system-ui;
+                    ">
+                        <div style="
+                            font-size:100px;
+                            font-weight:900;
+                            color:{cor};
+                            font-variant-numeric:tabular-nums;
+                            line-height:1;
+                            letter-spacing:3px;
+                            text-shadow: 0 3px 14px rgba(0,0,0,0.06);
+                        ">
+                            {restante_exibir // 60:02d}:{restante_exibir % 60:02d}
+                        </div>
+                        <div style="
+                            font-size:13px;
+                            color:#64748b;
+                            text-transform:uppercase;
+                            letter-spacing:2px;
+                            margin-top:8px;
+                        ">
+                            {'Pausado' if pausado_seg is not None else 'Pronto para iniciar'}
+                        </div>
+                        <div style="
+                            width:100%;
+                            height:14px;
+                            background:#e2e8f0;
+                            border-radius:7px;
+                            overflow:hidden;
+                            margin-top:16px;
+                        ">
+                            <div style="width:{pct}%;height:100%;background:{cor};"></div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.write("")
+
+            c_play, c_reset = st.columns(2)
+
+            with c_play:
+                if not rodando:
+                    label = "▶️ Iniciar" if pausado_seg is None else "▶️ Retomar"
+                    if st.button(label, type="primary", use_container_width=True, key="timer_play"):
+                        if pausado_seg is None:
+                            st.session_state.turno_iniciado_em = _agora_ms()
+                        else:
+                            segundos_decorridos = tempo_total - pausado_seg
+                            st.session_state.turno_iniciado_em = (
+                                _agora_ms() - (segundos_decorridos * 1000)
+                            )
+                        st.session_state.tempo_pausado_segundos = None
+                        st.session_state.timer_rodando = True
+                        st.session_state.turno_contador += 1
+                        if sala_id:
+                            fb_patch(sala_id, {
+                                "timer_iniciado_em": st.session_state.turno_iniciado_em
+                            })
+                        st.rerun()
+                else:
+                    if st.button("⏸️ Pausar", use_container_width=True, key="timer_pause"):
+                        decorrido_ms = _agora_ms() - st.session_state.turno_iniciado_em
+                        restante = max(0, int(tempo_total - decorrido_ms / 1000))
+                        st.session_state.tempo_pausado_segundos = restante
+                        st.session_state.timer_rodando = False
+                        st.rerun()
+
+            with c_reset:
+                if st.button("🔄 Reiniciar", use_container_width=True, key="timer_reset"):
+                    st.session_state.turno_iniciado_em = _agora_ms()
+                    st.session_state.tempo_pausado_segundos = None
+                    st.session_state.timer_rodando = False
+                    st.session_state.turno_contador += 1
+                    if sala_id:
+                        fb_patch(sala_id, {"timer_iniciado_em": None})
+                    st.rerun()
+
+            if rodando:
+                st.markdown(
+                    "<div style='text-align:center;color:#22c55e;"
+                    "font-weight:bold;padding-top:8px;font-size:15px;'>"
+                    "🟢 Cronômetro rodando</div>",
+                    unsafe_allow_html=True,
+                )
+            elif pausado_seg is not None:
+                st.markdown(
+                    "<div style='text-align:center;color:#eab308;"
+                    "font-weight:bold;padding-top:8px;font-size:15px;'>"
+                    "⏸️ Pausado</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f"<div style='text-align:center;color:#64748b;"
+                    f"font-weight:bold;padding-top:8px;font-size:15px;'>"
+                    f"⚪ Aguardando início ({tempo_total // 60:02d}:{tempo_total % 60:02d})</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("Configure minutos ou segundos na barra lateral.")
+    else:
+        st.info("⏱️ Cronômetro desativado. Ative na barra lateral para usar.")
 
 
 # =====================================================
@@ -997,6 +1273,6 @@ with st.expander(f"📜 Histórico ({len(st.session_state.sorteadas)} cartas)"):
 # =====================================================
 st.divider()
 st.caption(
-    "🎲 **Entre Linhas — Desktop + Celular do tirador** — "
-    "cada rodada, o tirador vê a carta secretamente no celular e decide Acertou/Errou."
+    "🎲 **Entre Linhas** — cada rodada, o tirador vê a carta secretamente no celular "
+    "e decide **Acertou** ou **Errou**. Vence quem conquistar mais cartas."
 )
